@@ -40,12 +40,31 @@ REST API:
 - `PATCH /api/clients/{id}/birth-profile` 更新
 - `DELETE /api/clients/{id}/birth-profile` 削除
 
+### 3. 算命学命式
+相談者1人につき1件の算命学命式を保存できます。
+
+保存項目:
+- 年干支・月干支・日干支
+- 中央・北方・東方・南方・西方の十大主星
+- 初年期・中年期・晩年期の十二大従星
+- 天中殺
+- 計算元・計算バージョン
+- 補足メモ
+
+REST API:
+- `POST /api/clients/{id}/sanmeigaku-chart` 新規登録
+- `GET /api/clients/{id}/sanmeigaku-chart` 取得
+- `PATCH /api/clients/{id}/sanmeigaku-chart` 更新
+- `DELETE /api/clients/{id}/sanmeigaku-chart` 削除
+
 MCP tools:
 - `db_now` DB接続確認
 - `create_client` 相談者登録
 - `search_clients` 相談者検索
 - `set_birth_profile` 出生情報の登録・更新
 - `get_birth_profile` 出生情報の取得
+- `set_sanmeigaku_chart` 算命学命式の登録・更新
+- `get_sanmeigaku_chart` 算命学命式の取得
 
 ブラウザから `/docs` を開くと FastAPI の操作画面で API を試せます。
 
@@ -63,7 +82,7 @@ MCP tools:
 ## 今後の実装予定
 1. 相談者カルテ ✅
 2. 生年月日・出生時間・出生地 ✅
-3. 算命学データ・命式 ← 次
-4. 鑑定履歴
+3. 算命学データ・命式 ✅
+4. 鑑定履歴 ← 次
 5. AI連携の拡張
 6. 鑑定士向け管理画面

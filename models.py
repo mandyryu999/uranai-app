@@ -29,6 +29,12 @@ class Client(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    sanmeigaku_chart: Mapped["SanmeigakuChart | None"] = relationship(
+        back_populates="client",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class BirthProfile(Base):
@@ -54,3 +60,41 @@ class BirthProfile(Base):
     )
 
     client: Mapped[Client] = relationship(back_populates="birth_profile")
+
+
+class SanmeigakuChart(Base):
+    __tablename__ = "sanmeigaku_charts"
+    __table_args__ = (UniqueConstraint("client_id", name="uq_sanmeigaku_charts_client_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    year_pillar: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    month_pillar: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    day_pillar: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    center_star: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    north_star: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    east_star: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    south_star: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    west_star: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    early_star: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    middle_star: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    late_star: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    tenchusatsu: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    calculation_source: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    calculation_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    client: Mapped[Client] = relationship(back_populates="sanmeigaku_chart")

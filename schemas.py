@@ -62,3 +62,41 @@ class BirthProfileRead(BirthProfileCreate):
     client_id: int
     created_at: datetime
     updated_at: datetime
+
+
+class SanmeigakuChartBase(BaseModel):
+    year_pillar: str | None = Field(default=None, max_length=20)
+    month_pillar: str | None = Field(default=None, max_length=20)
+    day_pillar: str | None = Field(default=None, max_length=20)
+
+    center_star: str | None = Field(default=None, max_length=40)
+    north_star: str | None = Field(default=None, max_length=40)
+    east_star: str | None = Field(default=None, max_length=40)
+    south_star: str | None = Field(default=None, max_length=40)
+    west_star: str | None = Field(default=None, max_length=40)
+
+    early_star: str | None = Field(default=None, max_length=40)
+    middle_star: str | None = Field(default=None, max_length=40)
+    late_star: str | None = Field(default=None, max_length=40)
+
+    tenchusatsu: str | None = Field(default=None, max_length=40)
+    calculation_source: str | None = Field(default=None, max_length=120)
+    calculation_version: str | None = Field(default=None, max_length=40)
+    notes: str | None = None
+
+
+class SanmeigakuChartCreate(SanmeigakuChartBase):
+    pass
+
+
+class SanmeigakuChartUpdate(SanmeigakuChartBase):
+    pass
+
+
+class SanmeigakuChartRead(SanmeigakuChartBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    client_id: int
+    created_at: datetime
+    updated_at: datetime

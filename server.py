@@ -7,7 +7,7 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
 from database import Base, SessionLocal, engine
-from models import BirthProfile, Client
+from models import BirthProfile, Client, SanmeigakuChart
 from schemas import (
     BirthProfileCreate,
     BirthProfileRead,
@@ -15,6 +15,9 @@ from schemas import (
     ClientCreate,
     ClientRead,
     ClientUpdate,
+    SanmeigakuChartCreate,
+    SanmeigakuChartRead,
+    SanmeigakuChartUpdate,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -34,6 +37,10 @@ def client_to_dict(client: Client) -> dict:
 
 def birth_profile_to_dict(profile: BirthProfile) -> dict:
     return BirthProfileRead.model_validate(profile).model_dump(mode="json")
+
+
+def sanmeigaku_chart_to_dict(chart: SanmeigakuChart) -> dict:
+    return SanmeigakuChartRead.model_validate(chart).model_dump(mode="json")
 
 
 mcp = FastMCP("uranai-app")
@@ -146,7 +153,70 @@ def get_birth_profile(client_id: int) -> dict:
         return birth_profile_to_dict(profile)
 
 
-app = FastAPI(title="uranai-app", version="0.3.0")
+@mcp.tool()
+def set_sanmeigaku_chart(
+    client_id: int,
+    year_pillar: str | None = None,
+    month_pillar: str | None = None,
+    day_pillar: str | None = None,
+    center_star: str | None = None,
+    north_star: str | None = None,
+    east_star: str | None = None,
+    south_star: str | None = None,
+    west_star: str | None = None,
+    early_star: str | None = None,
+    middle_star: str | None = None,
+    late_star: str | None = None,
+    tenchusatsu: str | None = None,
+    calculation_source: str | None = None,
+    calculation_version: str | None = None,
+    notes: str | None = None,
+) -> dict:
+    """相談者の算命学命式を新規登録または更新します。"""
+    payload = SanmeigakuChartCreate(
+        year_pillar=year_pillar,
+        month_pillar=month_pillar,
+        day_pillar=day_pillar,
+        center_star=center_star,
+        north_star=north_star,
+        east_star=east_star,
+        south_star=south_star,
+        west_star=west_star,
+        early_star=early_star,
+        middle_star=middle_star,
+        late_star=late_star,
+        tenchusatsu=tenchusatsu,
+        calculation_source=calculation_source,
+        calculation_version=calculation_version,
+        notes=notes,
+    )
+    with SessionLocal() as db:
+        client = db.get(Client, client_id)
+        if client is None:
+            raise ValueError("client not found")
+        chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+        if chart is None:
+            chart = SanmeigakuChart(client_id=client_id, **payload.model_dump())
+            db.add(chart)
+        else:
+            for field, value in payload.model_dump().items():
+                setattr(chart, field, value)
+        db.commit()
+        db.refresh(chart)
+        return sanmeigaku_chart_to_dict(chart)
+
+
+@mcp.tool()
+def get_sanmeigaku_chart(client_id: int) -> dict:
+    """相談者IDから保存済みの算命学命式を取得します。"""
+    with SessionLocal() as db:
+        chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+        if chart is None:
+            raise ValueError("sanmeigaku chart not found")
+        return sanmeigaku_chart_to_dict(chart)
+
+
+app = FastAPI(title="uranai-app", version="0.4.0")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -155,7 +225,7 @@ def index():
     <html lang="ja"><head><meta charset="utf-8"><title>uranai-app</title></head>
     <body style="font-family:sans-serif;max-width:760px;margin:48px auto;line-height:1.7">
       <h1>uranai-app</h1>
-      <p>相談者カルテと出生情報の基盤が動作中です。</p>
+      <p>相談者カルテ・出生情報・算命学命式の基盤が動作中です。</p>
       <ul>
         <li><a href="/docs">API操作画面</a></li>
         <li><a href="/api/clients">相談者一覧（JSON）</a></li>
@@ -299,6 +369,64 @@ def api_delete_birth_profile(client_id: int, db: Session = Depends(get_db)):
     if profile is None:
         raise HTTPException(status_code=404, detail="birth profile not found")
     db.delete(profile)
+    db.commit()
+
+
+@app.post(
+    "/api/clients/{client_id}/sanmeigaku-chart",
+    response_model=SanmeigakuChartRead,
+    status_code=201,
+)
+def api_create_sanmeigaku_chart(
+    client_id: int, payload: SanmeigakuChartCreate, db: Session = Depends(get_db)
+):
+    client = db.get(Client, client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail="client not found")
+    existing = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="sanmeigaku chart already exists")
+    chart = SanmeigakuChart(client_id=client_id, **payload.model_dump())
+    db.add(chart)
+    db.commit()
+    db.refresh(chart)
+    return chart
+
+
+@app.get(
+    "/api/clients/{client_id}/sanmeigaku-chart",
+    response_model=SanmeigakuChartRead,
+)
+def api_get_sanmeigaku_chart(client_id: int, db: Session = Depends(get_db)):
+    chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+    if chart is None:
+        raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
+    return chart
+
+
+@app.patch(
+    "/api/clients/{client_id}/sanmeigaku-chart",
+    response_model=SanmeigakuChartRead,
+)
+def api_update_sanmeigaku_chart(
+    client_id: int, payload: SanmeigakuChartUpdate, db: Session = Depends(get_db)
+):
+    chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+    if chart is None:
+        raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(chart, field, value)
+    db.commit()
+    db.refresh(chart)
+    return chart
+
+
+@app.delete("/api/clients/{client_id}/sanmeigaku-chart", status_code=204)
+def api_delete_sanmeigaku_chart(client_id: int, db: Session = Depends(get_db)):
+    chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+    if chart is None:
+        raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
+    db.delete(chart)
     db.commit()
 
 
