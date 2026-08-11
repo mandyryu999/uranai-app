@@ -3,7 +3,7 @@ import os
 import secrets
 
 from fastapi import HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import select
 
 from admin_ui import ADMIN_HTML
@@ -39,6 +39,11 @@ def _mcp_unauthorized(message: str = "MCP token required") -> Response:
 @app.middleware("http")
 async def protect_routes(request: Request, call_next):
     path = request.url.path
+
+    # 普段使う入口をシンプルにするため、トップURLは管理画面へ転送する。
+    if path == "/":
+        return RedirectResponse(url="/admin", status_code=307)
+
     if path.startswith("/mcp"):
         expected_token = _mcp_token()
         if not expected_token:
