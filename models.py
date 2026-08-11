@@ -16,19 +16,11 @@ class Client(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     line_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    birth_profile: Mapped["BirthProfile | None"] = relationship(
-        back_populates="client",
-        uselist=False,
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
+    birth_profile: Mapped["BirthProfile | None"] = relationship(back_populates="client", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
+    sanmeigaku_chart: Mapped["SanmeigakuChart | None"] = relationship(back_populates="client", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
 
 
 class BirthProfile(Base):
@@ -36,9 +28,7 @@ class BirthProfile(Base):
     __table_args__ = (UniqueConstraint("client_id", name="uq_birth_profiles_client_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    client_id: Mapped[int] = mapped_column(
-        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     birth_date: Mapped[date] = mapped_column(Date, nullable=False)
     birth_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     birth_time_unknown: Mapped[bool] = mapped_column(default=False, nullable=False)
@@ -46,11 +36,38 @@ class BirthProfile(Base):
     birthplace_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
     birthplace_detail: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Tokyo", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     client: Mapped[Client] = relationship(back_populates="birth_profile")
+
+
+class SanmeigakuChart(Base):
+    __tablename__ = "sanmeigaku_charts"
+    __table_args__ = (UniqueConstraint("client_id", name="uq_sanmeigaku_charts_client_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    year_pillar: Mapped[str] = mapped_column(String(10), nullable=False)
+    month_pillar: Mapped[str] = mapped_column(String(10), nullable=False)
+    day_pillar: Mapped[str] = mapped_column(String(10), nullable=False)
+    day_stem: Mapped[str] = mapped_column(String(4), nullable=False)
+    tenchusatsu: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    central_star: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    north_star: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    east_star: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    south_star: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    west_star: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    childhood_star: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    middle_age_star: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    later_life_star: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    source: Mapped[str] = mapped_column(String(30), default="manual", nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    client: Mapped[Client] = relationship(back_populates="sanmeigaku_chart")
