@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import html
 import os
 import secrets
 import time
@@ -58,27 +59,39 @@ SETUP_HTML = r'''<!doctype html>
 <button type="submit">最初の管理者を作成</button><div class="note">パスワードは暗号学的ハッシュに変換して保存し、元の文字列はDBへ保存しません。</div>
 </form></body></html>'''.replace("__CSS__", AUTH_CSS)
 
-OPENAI_SETTINGS_HTML = r'''<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenAI API設定</title>
-<style>
+SETTINGS_CSS = r'''
 :root{font-family:Inter,"Noto Sans JP",system-ui,sans-serif;color:#1f2937;background:#f5f3ef}*{box-sizing:border-box}
-body{margin:0;background:#f5f3ef}.top{background:#211b15;color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center}.top a{color:#eee;text-decoration:none;margin-left:16px}
-main{max-width:760px;margin:36px auto;padding:0 18px}.card{background:#fff;border:1px solid #ddd4c5;border-radius:16px;padding:24px;box-shadow:0 10px 30px #0000000b}
-h1{margin:0 0 8px;font-size:25px}.sub{color:#766d62;font-size:13px;line-height:1.7;margin-bottom:22px}.status{padding:12px;border-radius:10px;margin:15px 0;background:#f5f3ef;font-size:13px;line-height:1.7}.ok{background:#effbf2;color:#276738}.warn{background:#fff7e8;color:#765313}
-label{display:block;font-size:12px;color:#62594f;margin:15px 0 6px}input{width:100%;border:1px solid #d7cfc2;border-radius:10px;padding:12px;font:inherit}
-button{border:0;border-radius:10px;padding:11px 16px;background:#8b6b2f;color:#fff;font:inherit;font-weight:700;cursor:pointer;margin-top:14px}.danger{background:#9b2c2c}.row{display:flex;gap:10px;flex-wrap:wrap}.note{font-size:12px;color:#7d7469;line-height:1.7;margin-top:15px}.msg{background:#effbf2;color:#276738;border-radius:9px;padding:10px 12px;margin-bottom:16px;font-size:13px}
-</style></head><body>
-<div class="top"><strong>uranai-app 設定</strong><div><a href="/admin">管理画面へ戻る</a><a href="/logout">ログアウト</a></div></div>
+body{margin:0;background:#f5f3ef}.top{background:#211b15;color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.top a{color:#eee;text-decoration:none;margin-left:16px}
+main{max-width:840px;margin:36px auto;padding:0 18px}.card{background:#fff;border:1px solid #ddd4c5;border-radius:16px;padding:24px;box-shadow:0 10px 30px #0000000b;margin-bottom:18px}
+h1,h2{margin:0 0 8px}h1{font-size:25px}h2{font-size:19px}.sub{color:#766d62;font-size:13px;line-height:1.7;margin-bottom:22px}.status{padding:12px;border-radius:10px;margin:15px 0;background:#f5f3ef;font-size:13px;line-height:1.7}.ok{background:#effbf2;color:#276738}.warn{background:#fff7e8;color:#765313}
+label{display:block;font-size:12px;color:#62594f;margin:15px 0 6px}input{width:100%;border:1px solid #d7cfc2;border-radius:10px;padding:12px;font:inherit}button{border:0;border-radius:10px;padding:11px 16px;background:#8b6b2f;color:#fff;font:inherit;font-weight:700;cursor:pointer;margin-top:14px}.danger{background:#9b2c2c}.note{font-size:12px;color:#7d7469;line-height:1.7;margin-top:15px}.msg{background:#effbf2;color:#276738;border-radius:9px;padding:10px 12px;margin-bottom:16px;font-size:13px}.err{background:#fff1f1;color:#9b2c2c;border-radius:9px;padding:10px 12px;margin-bottom:16px;font-size:13px}.admins{display:grid;gap:8px;margin-top:12px}.admin-row{display:flex;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #e8e0d5;border-radius:10px;background:#faf9f7}.muted{color:#8a8176;font-size:12px}
+'''
+
+OPENAI_SETTINGS_HTML = r'''<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenAI API設定</title><style>__CSS__</style></head><body>
+<div class="top"><strong>uranai-app 設定</strong><div><a href="/admin">管理画面へ戻る</a><a href="/settings/admin">管理者設定</a><a href="/logout">ログアウト</a></div></div>
 <main><div class="card"><h1>OpenAI API設定</h1><div class="sub">AI鑑定補助で使用するOpenAI APIキーを、このアプリから登録できます。保存後にAPIキー全体を画面へ再表示することはありません。</div>
 __MESSAGE____STATUS__
 <form method="post" action="/settings/openai"><label for="api_key">OpenAI APIキー</label><input id="api_key" name="api_key" type="password" autocomplete="off" placeholder="sk-..." required><button type="submit">APIキーを保存・更新</button></form>
 <form method="post" action="/settings/openai/delete" onsubmit="return confirm('アプリに保存したOpenAI APIキーを削除しますか？')"><button class="danger" type="submit">アプリ保存のAPIキーを削除</button></form>
-<div class="note">APIキーはPostgreSQLへ平文保存せず、サーバー内の専用暗号鍵で暗号化して保存します。専用暗号鍵はDockerの永続ボリュームに置かれます。</div>
-</div></main></body></html>'''
+<div class="note">APIキーはPostgreSQLへ平文保存せず、サーバー内の専用暗号鍵で暗号化して保存します。</div>
+</div></main></body></html>'''.replace("__CSS__", SETTINGS_CSS)
+
+ADMIN_SETTINGS_HTML = r'''<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>管理者設定</title><style>__CSS__</style></head><body>
+<div class="top"><strong>uranai-app 設定</strong><div><a href="/admin">管理画面へ戻る</a><a href="/settings/openai">AI設定</a><a href="/logout">ログアウト</a></div></div>
+<main>
+<div class="card"><h1>管理者設定</h1><div class="sub">管理画面へ入れる管理者アカウントを管理します。現在ログイン中: <strong>__CURRENT__</strong></div>__MESSAGE__
+<h2>登録済み管理者</h2><div class="admins">__ADMINS__</div></div>
+<div class="card"><h2>管理者を追加</h2><div class="sub">家族・共同運営者など、管理画面を利用する人を追加できます。全管理者は同じ権限を持ちます。</div>
+<form method="post" action="/settings/admin/add"><label>新しい管理者ID</label><input name="username" minlength="3" maxlength="120" required><label>パスワード（12文字以上）</label><input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><label>パスワード確認</label><input name="password_confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><button type="submit">管理者を追加</button></form></div>
+<div class="card"><h2>自分のパスワードを変更</h2><div class="sub">変更後は安全のため一度ログアウトします。新しいパスワードで入り直してください。</div>
+<form method="post" action="/settings/admin/password"><label>現在のパスワード</label><input name="current_password" type="password" autocomplete="current-password" required><label>新しいパスワード（12文字以上）</label><input name="new_password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><label>新しいパスワード確認</label><input name="new_password_confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><button type="submit">パスワードを変更</button></form></div>
+</main></body></html>'''.replace("__CSS__", SETTINGS_CSS)
 
 
 def _render(template: str, error: str = "") -> str:
-    block = f'<div class="error">{error}</div>' if error else ""
+    block = f'<div class="error">{html.escape(error)}</div>' if error else ""
     return template.replace("__ERROR__", block)
 
 
@@ -130,6 +143,16 @@ def _make_session(username: str) -> str:
     return f"{payload}|{signature}"
 
 
+def _session_username(value: str | None) -> str | None:
+    if not value or not _valid_session(value):
+        return None
+    try:
+        username, _, _ = value.split("|", 2)
+        return username
+    except ValueError:
+        return None
+
+
 def _valid_session(value: str | None) -> bool:
     if not value:
         return False
@@ -152,7 +175,6 @@ def _mcp_unauthorized(message: str = "MCP token required") -> Response:
 @app.middleware("http")
 async def protect_routes(request: Request, call_next):
     path = request.url.path
-
     if path.startswith("/mcp"):
         expected_token = _mcp_token()
         if not expected_token:
@@ -214,7 +236,12 @@ def login_page(request: Request):
         return RedirectResponse(url="/setup", status_code=303)
     if _valid_session(request.cookies.get(SESSION_COOKIE)):
         return RedirectResponse(url="/admin", status_code=303)
-    message = '<div class="success">初期管理者を作成しました。登録したIDとパスワードでログインしてください。</div>' if request.query_params.get("created") == "1" else ""
+    if request.query_params.get("password_changed") == "1":
+        message = '<div class="success">パスワードを変更しました。新しいパスワードでログインしてください。</div>'
+    elif request.query_params.get("created") == "1":
+        message = '<div class="success">初期管理者を作成しました。登録したIDとパスワードでログインしてください。</div>'
+    else:
+        message = ""
     return LOGIN_HTML.replace("__ERROR__", message)
 
 
@@ -242,10 +269,10 @@ def _openai_settings_page(message: str = "") -> str:
     status = get_openai_api_key_status()
     if status["configured"]:
         source_text = "アプリ内に暗号化保存" if status["source"] == "app" else "サーバー環境変数"
-        status_html = f'<div class="status ok"><strong>設定済み</strong><br>保存元: {source_text}<br>キー: {status["masked"]}</div>'
+        status_html = f'<div class="status ok"><strong>設定済み</strong><br>保存元: {source_text}<br>キー: {html.escape(status["masked"] or "設定済み")}</div>'
     else:
         status_html = '<div class="status warn"><strong>未設定</strong><br>AI鑑定を実行するにはAPIキーを登録してください。</div>'
-    message_html = f'<div class="msg">{message}</div>' if message else ""
+    message_html = f'<div class="msg">{html.escape(message)}</div>' if message else ""
     return OPENAI_SETTINGS_HTML.replace("__STATUS__", status_html).replace("__MESSAGE__", message_html)
 
 
@@ -270,6 +297,82 @@ def save_openai_settings(api_key: str = Form(...)):
 def delete_openai_settings():
     delete_secret(OPENAI_API_KEY_SETTING)
     return RedirectResponse(url="/settings/openai?deleted=1", status_code=303)
+
+
+def _admin_settings_page(current_username: str, message: str = "", error: str = "") -> str:
+    with SessionLocal() as db:
+        admins = db.scalars(select(AdminUser).order_by(AdminUser.id)).all()
+    rows = []
+    for admin in admins:
+        suffix = ' <span class="muted">（ログイン中）</span>' if admin.username == current_username else ""
+        rows.append(f'<div class="admin-row"><strong>{html.escape(admin.username)}</strong><span class="muted">ID #{admin.id}</span>{suffix}</div>')
+    message_html = f'<div class="msg">{html.escape(message)}</div>' if message else ""
+    if error:
+        message_html = f'<div class="err">{html.escape(error)}</div>'
+    return (ADMIN_SETTINGS_HTML
+            .replace("__CURRENT__", html.escape(current_username))
+            .replace("__ADMINS__", "".join(rows))
+            .replace("__MESSAGE__", message_html))
+
+
+@app.get("/settings/admin", response_class=HTMLResponse, include_in_schema=False)
+def admin_settings(request: Request):
+    username = _session_username(request.cookies.get(SESSION_COOKIE))
+    if not username:
+        return RedirectResponse(url="/login", status_code=303)
+    message = ""
+    if request.query_params.get("added") == "1":
+        message = "管理者を追加しました。"
+    return _admin_settings_page(username, message=message)
+
+
+@app.post("/settings/admin/add", include_in_schema=False)
+def add_admin(request: Request, username: str = Form(...), password: str = Form(...), password_confirm: str = Form(...)):
+    current = _session_username(request.cookies.get(SESSION_COOKIE))
+    if not current:
+        return RedirectResponse(url="/login", status_code=303)
+    username = username.strip()
+    if len(username) < 3:
+        return HTMLResponse(_admin_settings_page(current, error="管理者IDは3文字以上にしてください。"), status_code=400)
+    if len(password) < 12:
+        return HTMLResponse(_admin_settings_page(current, error="パスワードは12文字以上にしてください。"), status_code=400)
+    if password != password_confirm:
+        return HTMLResponse(_admin_settings_page(current, error="確認用パスワードが一致しません。"), status_code=400)
+    salt, password_hash = _hash_password(password)
+    try:
+        with SessionLocal() as db:
+            db.add(AdminUser(username=username, password_salt=salt, password_hash=password_hash))
+            db.commit()
+    except IntegrityError:
+        return HTMLResponse(_admin_settings_page(current, error="その管理者IDはすでに使われています。"), status_code=409)
+    return RedirectResponse(url="/settings/admin?added=1", status_code=303)
+
+
+@app.post("/settings/admin/password", include_in_schema=False)
+def change_admin_password(request: Request, current_password: str = Form(...), new_password: str = Form(...), new_password_confirm: str = Form(...)):
+    username = _session_username(request.cookies.get(SESSION_COOKIE))
+    if not username:
+        return RedirectResponse(url="/login", status_code=303)
+    admin = _get_admin(username)
+    if admin is None or not _verify_password(current_password, admin):
+        return HTMLResponse(_admin_settings_page(username, error="現在のパスワードが違います。"), status_code=401)
+    if len(new_password) < 12:
+        return HTMLResponse(_admin_settings_page(username, error="新しいパスワードは12文字以上にしてください。"), status_code=400)
+    if new_password != new_password_confirm:
+        return HTMLResponse(_admin_settings_page(username, error="新しいパスワードの確認入力が一致しません。"), status_code=400)
+    if secrets.compare_digest(current_password, new_password):
+        return HTMLResponse(_admin_settings_page(username, error="現在と異なるパスワードを設定してください。"), status_code=400)
+    salt, password_hash = _hash_password(new_password)
+    with SessionLocal() as db:
+        target = db.scalar(select(AdminUser).where(AdminUser.username == username))
+        if target is None:
+            return RedirectResponse(url="/login", status_code=303)
+        target.password_salt = salt
+        target.password_hash = password_hash
+        db.commit()
+    response = RedirectResponse(url="/login?password_changed=1", status_code=303)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
 
 
 def _calculate_and_save(client_id: int) -> dict:
@@ -301,7 +404,7 @@ def _admin_html_with_auto_calculation() -> str:
     old = '<button class="secondary small" onclick="openChartModal()">登録・編集</button>'
     new = '<span><button class="gold small" onclick="autoCalculateChart()">自動計算</button> <button class="secondary small" onclick="openChartModal()">登録・編集</button></span>'
     header_old = '<div class="header-actions"><button class="gold" onclick="openClientModal(true)">＋ 新規相談者</button><a href="/docs" style="color:#ddd;text-decoration:none">API Docs</a></div>'
-    header_new = '<div class="header-actions"><button class="gold" onclick="openClientModal(true)">＋ 新規相談者</button><a href="/settings/openai" style="color:#ddd;text-decoration:none">AI設定</a><a href="/docs" style="color:#ddd;text-decoration:none">API Docs</a><a href="/logout" style="color:#ddd;text-decoration:none">ログアウト</a></div>'
+    header_new = '<div class="header-actions"><button class="gold" onclick="openClientModal(true)">＋ 新規相談者</button><a href="/settings/openai" style="color:#ddd;text-decoration:none">AI設定</a><a href="/settings/admin" style="color:#ddd;text-decoration:none">管理者設定</a><a href="/docs" style="color:#ddd;text-decoration:none">API Docs</a><a href="/logout" style="color:#ddd;text-decoration:none">ログアウト</a></div>'
     script = r'''
 async function autoCalculateChart(){
   if(!selectedId)return;
