@@ -10,6 +10,9 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
+      APP_SETTINGS_KEY_PATH: /app-secrets/settings.key
+    volumes:
+      - app_secrets:/app-secrets
     depends_on:
       db:
         condition: service_healthy
@@ -59,3 +62,4 @@ services:
 volumes:
   db_data:
   db_backups:
+  app_secrets:
