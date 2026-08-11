@@ -33,6 +33,19 @@ REST API:
 - `PATCH /api/clients/{id}/readings/{reading_id}` 更新
 - `DELETE /api/clients/{id}/readings/{reading_id}` 削除
 
+### 5. AI連携用・相談者コンテキスト
+AIが鑑定を補助するときに必要な情報を、相談者IDだけでまとめて取得できます。
+
+取得内容:
+- 相談者カルテ
+- 出生プロフィール（未登録なら `null`）
+- 算命学命式（未登録なら `null`）
+- 直近の鑑定履歴（既定10件、最大100件）
+
+REST API:
+- `GET /api/clients/{id}/context` AI向け統合コンテキスト取得
+- `reading_limit` で含める鑑定履歴件数を指定可能
+
 MCP tools:
 - `db_now` DB接続確認
 - `create_client` 相談者登録
@@ -43,6 +56,7 @@ MCP tools:
 - `get_sanmeigaku_chart` 算命学命式の取得
 - `add_reading` 鑑定履歴を追加
 - `list_readings` 鑑定履歴を新しい順に取得
+- `get_client_context` AI鑑定用に相談者情報を一括取得
 
 ブラウザから `/docs` を開くと FastAPI の操作画面で API を試せます。
 
@@ -62,5 +76,6 @@ MCP tools:
 2. 生年月日・出生時間・出生地 ✅
 3. 算命学データ・命式 ✅
 4. 鑑定履歴 ✅
-5. AI連携の拡張 ← 次
-6. 鑑定士向け管理画面
+5. AI連携の拡張 🚧（統合コンテキスト取得まで実装）
+6. AI鑑定プロンプト・回答生成
+7. 鑑定士向け管理画面
