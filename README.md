@@ -19,29 +19,8 @@ FastAPI・PostgreSQL・MCP・OpenAI API を組み合わせた、占い鑑定支�
 ### 5. AI連携用・相談者コンテキスト
 相談者カルテ、出生情報、算命学命式、直近の鑑定履歴を1回で取得できます。
 
-REST API:
-- `GET /api/clients/{id}/context`
-
-MCP:
-- `get_client_context`
-
 ### 6. AI鑑定プロンプト・回答生成
 保存済み相談者情報を使って、AI鑑定補助用のプロンプトを作成し、OpenAI Responses APIで回答を生成できます。
-
-REST API:
-- `POST /api/clients/{id}/ai/prompt` AIへ送るプロンプトを確認
-- `POST /api/clients/{id}/ai/generate` AI鑑定補助回答を生成
-
-MCP:
-- `build_ai_reading_prompt` AI送信用プロンプトを作成
-- `generate_ai_reading` OpenAI APIで回答生成
-
-回答方針:
-- 不安を煽らない
-- 断定しすぎない
-- 保存済み事実と占術上の解釈を区別する
-- 過去履歴との矛盾があれば示す
-- 最終判断は相談者本人に残す
 
 ### 7. 鑑定士向け管理画面
 ブラウザから `/admin` を開くと、相談者の登録から鑑定履歴保存まで一連の作業を行えます。
@@ -55,12 +34,34 @@ MCP:
 - 十大主星を人体星図に近い配置で確認
 - 新しい鑑定履歴を保存
 - 直近の鑑定履歴を確認
-- 今回の相談内容を入力してAI送信前プロンプトを確認
-- OpenAI API設定済みの場合はAI鑑定補助回答を生成
-- AI鑑定結果をそのまま鑑定履歴の入力フォームへ引き継いで保存
+- AI送信前プロンプトを確認
+- AI鑑定補助回答を生成
+- AI鑑定結果を鑑定履歴へ引き継いで保存
 
-管理画面:
-- `GET /admin`
+### 8. 管理画面・管理API認証
+HTTP Basic認証で、相談者情報を扱う管理機能を保護します。
+
+保護対象:
+- `/admin`
+- `/api/...`
+- `/docs`
+- `/openapi.json`
+
+公開のままにするもの:
+- `/health`（デプロイ・死活監視用）
+- `/`（アプリ稼働確認）
+- `/mcp`（現在は既存MCPクライアント互換性のため別扱い。今後トークン認証を追加予定）
+
+サーバー側で次の環境変数を必ず設定してください。コードやGitHubへ実際のパスワードを書かないでください。
+
+```bash
+export ADMIN_USERNAME="your-admin-name"
+export ADMIN_PASSWORD="十分に長いランダムなパスワード"
+```
+
+`ADMIN_USERNAME` または `ADMIN_PASSWORD` が未設定の場合、保護対象は `503 Admin authentication is not configured` を返して閉じた状態になります。
+
+ブラウザで `/admin` を開くとユーザー名・パスワード入力画面が表示され、認証後は同一オリジンの管理API呼び出しにも認証情報が使用されます。
 
 ## OpenAI API設定
 
@@ -73,7 +74,7 @@ export OPENAI_MODEL="gpt-5"
 
 `OPENAI_API_KEY` が未設定の場合、`/ai/generate` は外部APIを呼ばず `not_configured` を返し、生成予定のプロンプトを確認できます。
 
-Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` をWebコンテナへ引き渡します。
+Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` / `ADMIN_USERNAME` / `ADMIN_PASSWORD` をWebコンテナへ引き渡します。
 
 ## 主なMCP tools
 - `db_now`
@@ -89,8 +90,6 @@ Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` をWebコ�
 - `build_ai_reading_prompt`
 - `generate_ai_reading`
 
-ブラウザから `/docs` を開くと FastAPI の操作画面で API を試せます。
-
 ## 構成
 - `web` FastAPI（Web/API/MCP、内部8000番）
 - `db` PostgreSQL 16
@@ -100,7 +99,7 @@ Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` をWebコ�
 - `ai_service.py` AIプロンプト作成・OpenAI API接続
 - `server.py` Web API・MCP
 - `admin_ui.py` 鑑定士向け管理画面HTML/JavaScript
-- `admin_app.py` `/admin` ルートを追加して既存アプリを拡張
+- `admin_app.py` `/admin` と管理系認証を追加
 
 ## MCP
 接続先: `https://<あなたのドメイン>/mcp/sse`
@@ -114,4 +113,5 @@ Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` をWebコ�
 6. AI鑑定プロンプト・回答生成 ✅
 7. 鑑定士向け管理画面 ✅
 8. 管理画面から登録・編集・保存 ✅
-9. 認証・権限管理・バックアップ ← 次候補
+9. 管理画面・管理API認証 ✅
+10. MCP認証・自動バックアップ ← 次候補
