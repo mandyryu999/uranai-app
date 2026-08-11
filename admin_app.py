@@ -74,7 +74,8 @@ def _calculate_and_save(client_id: int) -> dict:
         profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
         if profile is None:
             raise ValueError("birth profile not found")
-        result = calculate_chart(profile.birth_date)
+        known_birth_time = None if profile.birth_time_unknown else profile.birth_time
+        result = calculate_chart(profile.birth_date, known_birth_time)
         detail = result.pop("calculation_detail")
         chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
         if chart is None:
@@ -105,7 +106,8 @@ async function autoCalculateChart(){
   try{
     const d=await api(`/api/clients/${selectedId}/sanmeigaku-chart/auto-calculate`,{method:'POST'});
     await selectClient(selectedId);
-    alert(`命式を自動計算しました。\n${d.chart.year_pillar} / ${d.chart.month_pillar} / ${d.chart.day_pillar}\n${d.chart.tenchusatsu}`);
+    const warning=d.detail?.boundary_warning?`\n\n注意: ${d.detail.boundary_warning}`:'';
+    alert(`命式を自動計算しました。\n${d.chart.year_pillar} / ${d.chart.month_pillar} / ${d.chart.day_pillar}\n${d.chart.tenchusatsu}${warning}`);
   }catch(e){alert(e.message)}
 }
 '''
