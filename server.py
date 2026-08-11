@@ -50,6 +50,35 @@ def reading_to_dict(reading: Reading) -> dict:
     return ReadingRead.model_validate(reading).model_dump(mode="json")
 
 
+def build_client_context(db: Session, client_id: int, reading_limit: int = 10) -> dict:
+    """AI鑑定用に相談者情報を1つのJSONへまとめます。"""
+    client = db.get(Client, client_id)
+    if client is None:
+        raise ValueError("client not found")
+
+    reading_limit = max(1, min(reading_limit, 100))
+    birth_profile = db.scalar(
+        select(BirthProfile).where(BirthProfile.client_id == client_id)
+    )
+    chart = db.scalar(
+        select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id)
+    )
+    readings = db.scalars(
+        select(Reading)
+        .where(Reading.client_id == client_id)
+        .order_by(Reading.reading_at.desc(), Reading.id.desc())
+        .limit(reading_limit)
+    ).all()
+
+    return {
+        "client": client_to_dict(client),
+        "birth_profile": birth_profile_to_dict(birth_profile) if birth_profile else None,
+        "sanmeigaku_chart": sanmeigaku_chart_to_dict(chart) if chart else None,
+        "readings": [reading_to_dict(reading) for reading in readings],
+        "reading_count_included": len(readings),
+    }
+
+
 mcp = FastMCP("uranai-app")
 
 
@@ -61,23 +90,9 @@ def db_now() -> str:
 
 
 @mcp.tool()
-def create_client(
-    name: str,
-    name_kana: str | None = None,
-    phone: str | None = None,
-    email: str | None = None,
-    line_name: str | None = None,
-    notes: str | None = None,
-) -> dict:
+def create_client(name: str, name_kana: str | None = None, phone: str | None = None, email: str | None = None, line_name: str | None = None, notes: str | None = None) -> dict:
     """相談者カルテを新規登録します。"""
-    payload = ClientCreate(
-        name=name,
-        name_kana=name_kana,
-        phone=phone,
-        email=email,
-        line_name=line_name,
-        notes=notes,
-    )
+    payload = ClientCreate(name=name, name_kana=name_kana, phone=phone, email=email, line_name=line_name, notes=notes)
     with SessionLocal() as db:
         client = Client(**payload.model_dump())
         db.add(client)
@@ -94,49 +109,18 @@ def search_clients(query: str = "", limit: int = 20) -> list[dict]:
         stmt = select(Client).order_by(Client.updated_at.desc()).limit(limit)
         if query.strip():
             pattern = f"%{query.strip()}%"
-            stmt = (
-                select(Client)
-                .where(
-                    or_(
-                        Client.name.ilike(pattern),
-                        Client.name_kana.ilike(pattern),
-                        Client.phone.ilike(pattern),
-                        Client.email.ilike(pattern),
-                        Client.line_name.ilike(pattern),
-                    )
-                )
-                .order_by(Client.updated_at.desc())
-                .limit(limit)
-            )
+            stmt = select(Client).where(or_(Client.name.ilike(pattern), Client.name_kana.ilike(pattern), Client.phone.ilike(pattern), Client.email.ilike(pattern), Client.line_name.ilike(pattern))).order_by(Client.updated_at.desc()).limit(limit)
         return [client_to_dict(client) for client in db.scalars(stmt).all()]
 
 
 @mcp.tool()
-def set_birth_profile(
-    client_id: int,
-    birth_date: str,
-    birth_time: str | None = None,
-    birth_time_unknown: bool = False,
-    birthplace_prefecture: str | None = None,
-    birthplace_city: str | None = None,
-    birthplace_detail: str | None = None,
-    timezone: str = "Asia/Tokyo",
-) -> dict:
-    """相談者の出生情報を新規登録または更新します。日付はYYYY-MM-DD、時刻はHH:MM形式です。"""
+def set_birth_profile(client_id: int, birth_date: str, birth_time: str | None = None, birth_time_unknown: bool = False, birthplace_prefecture: str | None = None, birthplace_city: str | None = None, birthplace_detail: str | None = None, timezone: str = "Asia/Tokyo") -> dict:
+    """相談者の出生情報を新規登録または更新します。"""
     parsed_date = date.fromisoformat(birth_date)
     parsed_time = None if birth_time_unknown or not birth_time else time.fromisoformat(birth_time)
-    payload = BirthProfileCreate(
-        birth_date=parsed_date,
-        birth_time=parsed_time,
-        birth_time_unknown=birth_time_unknown,
-        birthplace_prefecture=birthplace_prefecture,
-        birthplace_city=birthplace_city,
-        birthplace_detail=birthplace_detail,
-        timezone=timezone,
-    )
+    payload = BirthProfileCreate(birth_date=parsed_date, birth_time=parsed_time, birth_time_unknown=birth_time_unknown, birthplace_prefecture=birthplace_prefecture, birthplace_city=birthplace_city, birthplace_detail=birthplace_detail, timezone=timezone)
     with SessionLocal() as db:
-        client = db.get(Client, client_id)
-        if client is None:
+        if db.get(Client, client_id) is None:
             raise ValueError("client not found")
         profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
         if profile is None:
@@ -145,8 +129,7 @@ def set_birth_profile(
         else:
             for field, value in payload.model_dump().items():
                 setattr(profile, field, value)
-        db.commit()
-        db.refresh(profile)
+        db.commit(); db.refresh(profile)
         return birth_profile_to_dict(profile)
 
 
@@ -161,55 +144,18 @@ def get_birth_profile(client_id: int) -> dict:
 
 
 @mcp.tool()
-def set_sanmeigaku_chart(
-    client_id: int,
-    year_pillar: str | None = None,
-    month_pillar: str | None = None,
-    day_pillar: str | None = None,
-    center_star: str | None = None,
-    north_star: str | None = None,
-    east_star: str | None = None,
-    south_star: str | None = None,
-    west_star: str | None = None,
-    early_star: str | None = None,
-    middle_star: str | None = None,
-    late_star: str | None = None,
-    tenchusatsu: str | None = None,
-    calculation_source: str | None = None,
-    calculation_version: str | None = None,
-    notes: str | None = None,
-) -> dict:
+def set_sanmeigaku_chart(client_id: int, year_pillar: str | None = None, month_pillar: str | None = None, day_pillar: str | None = None, center_star: str | None = None, north_star: str | None = None, east_star: str | None = None, south_star: str | None = None, west_star: str | None = None, early_star: str | None = None, middle_star: str | None = None, late_star: str | None = None, tenchusatsu: str | None = None, calculation_source: str | None = None, calculation_version: str | None = None, notes: str | None = None) -> dict:
     """相談者の算命学命式を新規登録または更新します。"""
-    payload = SanmeigakuChartCreate(
-        year_pillar=year_pillar,
-        month_pillar=month_pillar,
-        day_pillar=day_pillar,
-        center_star=center_star,
-        north_star=north_star,
-        east_star=east_star,
-        south_star=south_star,
-        west_star=west_star,
-        early_star=early_star,
-        middle_star=middle_star,
-        late_star=late_star,
-        tenchusatsu=tenchusatsu,
-        calculation_source=calculation_source,
-        calculation_version=calculation_version,
-        notes=notes,
-    )
+    payload = SanmeigakuChartCreate(year_pillar=year_pillar, month_pillar=month_pillar, day_pillar=day_pillar, center_star=center_star, north_star=north_star, east_star=east_star, south_star=south_star, west_star=west_star, early_star=early_star, middle_star=middle_star, late_star=late_star, tenchusatsu=tenchusatsu, calculation_source=calculation_source, calculation_version=calculation_version, notes=notes)
     with SessionLocal() as db:
-        client = db.get(Client, client_id)
-        if client is None:
+        if db.get(Client, client_id) is None:
             raise ValueError("client not found")
         chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
         if chart is None:
-            chart = SanmeigakuChart(client_id=client_id, **payload.model_dump())
-            db.add(chart)
+            chart = SanmeigakuChart(client_id=client_id, **payload.model_dump()); db.add(chart)
         else:
-            for field, value in payload.model_dump().items():
-                setattr(chart, field, value)
-        db.commit()
-        db.refresh(chart)
+            for field, value in payload.model_dump().items(): setattr(chart, field, value)
+        db.commit(); db.refresh(chart)
         return sanmeigaku_chart_to_dict(chart)
 
 
@@ -218,42 +164,18 @@ def get_sanmeigaku_chart(client_id: int) -> dict:
     """相談者IDから保存済みの算命学命式を取得します。"""
     with SessionLocal() as db:
         chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
-        if chart is None:
-            raise ValueError("sanmeigaku chart not found")
+        if chart is None: raise ValueError("sanmeigaku chart not found")
         return sanmeigaku_chart_to_dict(chart)
 
 
 @mcp.tool()
-def add_reading(
-    client_id: int,
-    theme: str | None = None,
-    consultation: str | None = None,
-    methods: str | None = None,
-    result: str | None = None,
-    advice: str | None = None,
-    follow_up: str | None = None,
-    private_notes: str | None = None,
-    reading_at: str | None = None,
-) -> dict:
-    """相談者の鑑定履歴を1件追加します。reading_atはISO 8601形式です。"""
+def add_reading(client_id: int, theme: str | None = None, consultation: str | None = None, methods: str | None = None, result: str | None = None, advice: str | None = None, follow_up: str | None = None, private_notes: str | None = None, reading_at: str | None = None) -> dict:
+    """相談者の鑑定履歴を1件追加します。"""
     parsed_at = datetime.fromisoformat(reading_at) if reading_at else datetime.now(timezone.utc)
-    payload = ReadingCreate(
-        reading_at=parsed_at,
-        theme=theme,
-        consultation=consultation,
-        methods=methods,
-        result=result,
-        advice=advice,
-        follow_up=follow_up,
-        private_notes=private_notes,
-    )
+    payload = ReadingCreate(reading_at=parsed_at, theme=theme, consultation=consultation, methods=methods, result=result, advice=advice, follow_up=follow_up, private_notes=private_notes)
     with SessionLocal() as db:
-        if db.get(Client, client_id) is None:
-            raise ValueError("client not found")
-        reading = Reading(client_id=client_id, **payload.model_dump())
-        db.add(reading)
-        db.commit()
-        db.refresh(reading)
+        if db.get(Client, client_id) is None: raise ValueError("client not found")
+        reading = Reading(client_id=client_id, **payload.model_dump()); db.add(reading); db.commit(); db.refresh(reading)
         return reading_to_dict(reading)
 
 
@@ -262,262 +184,172 @@ def list_readings(client_id: int, limit: int = 20) -> list[dict]:
     """相談者の鑑定履歴を新しい順に取得します。"""
     limit = max(1, min(limit, 100))
     with SessionLocal() as db:
-        readings = db.scalars(
-            select(Reading)
-            .where(Reading.client_id == client_id)
-            .order_by(Reading.reading_at.desc(), Reading.id.desc())
-            .limit(limit)
-        ).all()
+        readings = db.scalars(select(Reading).where(Reading.client_id == client_id).order_by(Reading.reading_at.desc(), Reading.id.desc()).limit(limit)).all()
         return [reading_to_dict(reading) for reading in readings]
 
 
-app = FastAPI(title="uranai-app", version="0.5.0")
+@mcp.tool()
+def get_client_context(client_id: int, reading_limit: int = 10) -> dict:
+    """AI鑑定用に相談者カルテ・出生情報・命式・直近の鑑定履歴をまとめて取得します。"""
+    with SessionLocal() as db:
+        return build_client_context(db, client_id, reading_limit)
+
+
+app = FastAPI(title="uranai-app", version="0.6.0")
 
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return """
-    <html lang="ja"><head><meta charset="utf-8"><title>uranai-app</title></head>
-    <body style="font-family:sans-serif;max-width:760px;margin:48px auto;line-height:1.7">
-      <h1>uranai-app</h1>
-      <p>相談者カルテ・出生情報・算命学命式・鑑定履歴の基盤が動作中です。</p>
-      <ul>
-        <li><a href="/docs">API操作画面</a></li>
-        <li><a href="/api/clients">相談者一覧（JSON）</a></li>
-        <li>MCP: <code>/mcp/sse</code></li>
-      </ul>
-    </body></html>
-    """
+    return """<html lang="ja"><head><meta charset="utf-8"><title>uranai-app</title></head><body style="font-family:sans-serif;max-width:760px;margin:48px auto;line-height:1.7"><h1>uranai-app</h1><p>相談者カルテ・出生情報・算命学命式・鑑定履歴・AI用コンテキスト取得が動作中です。</p><ul><li><a href="/docs">API操作画面</a></li><li><a href="/api/clients">相談者一覧（JSON）</a></li><li>MCP: <code>/mcp/sse</code></li></ul></body></html>"""
 
 
 @app.get("/health")
 def health():
     try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        with engine.connect() as conn: conn.execute(text("SELECT 1"))
         return {"ok": True, "database": "ok"}
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    except Exception as exc: raise HTTPException(status_code=503, detail="database unavailable") from exc
 
 
 @app.post("/api/clients", response_model=ClientRead, status_code=201)
 def api_create_client(payload: ClientCreate, db: Session = Depends(get_db)):
-    client = Client(**payload.model_dump())
-    db.add(client)
-    db.commit()
-    db.refresh(client)
-    return client
+    client = Client(**payload.model_dump()); db.add(client); db.commit(); db.refresh(client); return client
 
 
 @app.get("/api/clients", response_model=list[ClientRead])
-def api_list_clients(
-    q: str | None = Query(default=None, max_length=255),
-    limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),
-):
+def api_list_clients(q: str | None = Query(default=None, max_length=255), limit: int = Query(default=50, ge=1, le=100), db: Session = Depends(get_db)):
     stmt = select(Client).order_by(Client.updated_at.desc()).limit(limit)
     if q and q.strip():
         pattern = f"%{q.strip()}%"
-        stmt = (
-            select(Client)
-            .where(
-                or_(
-                    Client.name.ilike(pattern),
-                    Client.name_kana.ilike(pattern),
-                    Client.phone.ilike(pattern),
-                    Client.email.ilike(pattern),
-                    Client.line_name.ilike(pattern),
-                )
-            )
-            .order_by(Client.updated_at.desc())
-            .limit(limit)
-        )
+        stmt = select(Client).where(or_(Client.name.ilike(pattern), Client.name_kana.ilike(pattern), Client.phone.ilike(pattern), Client.email.ilike(pattern), Client.line_name.ilike(pattern))).order_by(Client.updated_at.desc()).limit(limit)
     return db.scalars(stmt).all()
 
 
 @app.get("/api/clients/{client_id}", response_model=ClientRead)
 def api_get_client(client_id: int, db: Session = Depends(get_db)):
     client = db.get(Client, client_id)
-    if client is None:
-        raise HTTPException(status_code=404, detail="client not found")
+    if client is None: raise HTTPException(status_code=404, detail="client not found")
     return client
+
+
+@app.get("/api/clients/{client_id}/context")
+def api_get_client_context(client_id: int, reading_limit: int = Query(default=10, ge=1, le=100), db: Session = Depends(get_db)):
+    """AI連携向けの統合相談者コンテキストを返します。"""
+    try:
+        return build_client_context(db, client_id, reading_limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.patch("/api/clients/{client_id}", response_model=ClientRead)
 def api_update_client(client_id: int, payload: ClientUpdate, db: Session = Depends(get_db)):
     client = db.get(Client, client_id)
-    if client is None:
-        raise HTTPException(status_code=404, detail="client not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(client, field, value)
-    db.commit()
-    db.refresh(client)
-    return client
+    if client is None: raise HTTPException(status_code=404, detail="client not found")
+    for field, value in payload.model_dump(exclude_unset=True).items(): setattr(client, field, value)
+    db.commit(); db.refresh(client); return client
 
 
 @app.delete("/api/clients/{client_id}", status_code=204)
 def api_delete_client(client_id: int, db: Session = Depends(get_db)):
     client = db.get(Client, client_id)
-    if client is None:
-        raise HTTPException(status_code=404, detail="client not found")
-    db.delete(client)
-    db.commit()
+    if client is None: raise HTTPException(status_code=404, detail="client not found")
+    db.delete(client); db.commit()
 
 
 @app.post("/api/clients/{client_id}/birth-profile", response_model=BirthProfileRead, status_code=201)
 def api_create_birth_profile(client_id: int, payload: BirthProfileCreate, db: Session = Depends(get_db)):
-    if db.get(Client, client_id) is None:
-        raise HTTPException(status_code=404, detail="client not found")
-    existing = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
-    if existing is not None:
-        raise HTTPException(status_code=409, detail="birth profile already exists")
-    profile = BirthProfile(client_id=client_id, **payload.model_dump())
-    db.add(profile)
-    db.commit()
-    db.refresh(profile)
-    return profile
+    if db.get(Client, client_id) is None: raise HTTPException(status_code=404, detail="client not found")
+    if db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id)) is not None: raise HTTPException(status_code=409, detail="birth profile already exists")
+    profile = BirthProfile(client_id=client_id, **payload.model_dump()); db.add(profile); db.commit(); db.refresh(profile); return profile
 
 
 @app.get("/api/clients/{client_id}/birth-profile", response_model=BirthProfileRead)
 def api_get_birth_profile(client_id: int, db: Session = Depends(get_db)):
     profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
-    if profile is None:
-        raise HTTPException(status_code=404, detail="birth profile not found")
+    if profile is None: raise HTTPException(status_code=404, detail="birth profile not found")
     return profile
 
 
 @app.patch("/api/clients/{client_id}/birth-profile", response_model=BirthProfileRead)
 def api_update_birth_profile(client_id: int, payload: BirthProfileUpdate, db: Session = Depends(get_db)):
     profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
-    if profile is None:
-        raise HTTPException(status_code=404, detail="birth profile not found")
+    if profile is None: raise HTTPException(status_code=404, detail="birth profile not found")
     updates = payload.model_dump(exclude_unset=True)
-    if updates.get("birth_time_unknown") is True:
-        updates["birth_time"] = None
-    for field, value in updates.items():
-        setattr(profile, field, value)
-    db.commit()
-    db.refresh(profile)
-    return profile
+    if updates.get("birth_time_unknown") is True: updates["birth_time"] = None
+    for field, value in updates.items(): setattr(profile, field, value)
+    db.commit(); db.refresh(profile); return profile
 
 
 @app.delete("/api/clients/{client_id}/birth-profile", status_code=204)
 def api_delete_birth_profile(client_id: int, db: Session = Depends(get_db)):
     profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
-    if profile is None:
-        raise HTTPException(status_code=404, detail="birth profile not found")
-    db.delete(profile)
-    db.commit()
+    if profile is None: raise HTTPException(status_code=404, detail="birth profile not found")
+    db.delete(profile); db.commit()
 
 
 @app.post("/api/clients/{client_id}/sanmeigaku-chart", response_model=SanmeigakuChartRead, status_code=201)
 def api_create_sanmeigaku_chart(client_id: int, payload: SanmeigakuChartCreate, db: Session = Depends(get_db)):
-    if db.get(Client, client_id) is None:
-        raise HTTPException(status_code=404, detail="client not found")
-    existing = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
-    if existing is not None:
-        raise HTTPException(status_code=409, detail="sanmeigaku chart already exists")
-    chart = SanmeigakuChart(client_id=client_id, **payload.model_dump())
-    db.add(chart)
-    db.commit()
-    db.refresh(chart)
-    return chart
+    if db.get(Client, client_id) is None: raise HTTPException(status_code=404, detail="client not found")
+    if db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id)) is not None: raise HTTPException(status_code=409, detail="sanmeigaku chart already exists")
+    chart = SanmeigakuChart(client_id=client_id, **payload.model_dump()); db.add(chart); db.commit(); db.refresh(chart); return chart
 
 
 @app.get("/api/clients/{client_id}/sanmeigaku-chart", response_model=SanmeigakuChartRead)
 def api_get_sanmeigaku_chart(client_id: int, db: Session = Depends(get_db)):
     chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
-    if chart is None:
-        raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
+    if chart is None: raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
     return chart
 
 
 @app.patch("/api/clients/{client_id}/sanmeigaku-chart", response_model=SanmeigakuChartRead)
 def api_update_sanmeigaku_chart(client_id: int, payload: SanmeigakuChartUpdate, db: Session = Depends(get_db)):
     chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
-    if chart is None:
-        raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(chart, field, value)
-    db.commit()
-    db.refresh(chart)
-    return chart
+    if chart is None: raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
+    for field, value in payload.model_dump(exclude_unset=True).items(): setattr(chart, field, value)
+    db.commit(); db.refresh(chart); return chart
 
 
 @app.delete("/api/clients/{client_id}/sanmeigaku-chart", status_code=204)
 def api_delete_sanmeigaku_chart(client_id: int, db: Session = Depends(get_db)):
     chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
-    if chart is None:
-        raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
-    db.delete(chart)
-    db.commit()
+    if chart is None: raise HTTPException(status_code=404, detail="sanmeigaku chart not found")
+    db.delete(chart); db.commit()
 
 
 @app.post("/api/clients/{client_id}/readings", response_model=ReadingRead, status_code=201)
 def api_create_reading(client_id: int, payload: ReadingCreate, db: Session = Depends(get_db)):
-    if db.get(Client, client_id) is None:
-        raise HTTPException(status_code=404, detail="client not found")
+    if db.get(Client, client_id) is None: raise HTTPException(status_code=404, detail="client not found")
     data = payload.model_dump()
-    if data["reading_at"] is None:
-        data["reading_at"] = datetime.now(timezone.utc)
-    reading = Reading(client_id=client_id, **data)
-    db.add(reading)
-    db.commit()
-    db.refresh(reading)
-    return reading
+    if data["reading_at"] is None: data["reading_at"] = datetime.now(timezone.utc)
+    reading = Reading(client_id=client_id, **data); db.add(reading); db.commit(); db.refresh(reading); return reading
 
 
 @app.get("/api/clients/{client_id}/readings", response_model=list[ReadingRead])
-def api_list_readings(
-    client_id: int,
-    limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),
-):
-    if db.get(Client, client_id) is None:
-        raise HTTPException(status_code=404, detail="client not found")
-    return db.scalars(
-        select(Reading)
-        .where(Reading.client_id == client_id)
-        .order_by(Reading.reading_at.desc(), Reading.id.desc())
-        .limit(limit)
-    ).all()
+def api_list_readings(client_id: int, limit: int = Query(default=50, ge=1, le=100), db: Session = Depends(get_db)):
+    if db.get(Client, client_id) is None: raise HTTPException(status_code=404, detail="client not found")
+    return db.scalars(select(Reading).where(Reading.client_id == client_id).order_by(Reading.reading_at.desc(), Reading.id.desc()).limit(limit)).all()
 
 
 @app.get("/api/clients/{client_id}/readings/{reading_id}", response_model=ReadingRead)
 def api_get_reading(client_id: int, reading_id: int, db: Session = Depends(get_db)):
-    reading = db.scalar(
-        select(Reading).where(Reading.id == reading_id, Reading.client_id == client_id)
-    )
-    if reading is None:
-        raise HTTPException(status_code=404, detail="reading not found")
+    reading = db.scalar(select(Reading).where(Reading.id == reading_id, Reading.client_id == client_id))
+    if reading is None: raise HTTPException(status_code=404, detail="reading not found")
     return reading
 
 
 @app.patch("/api/clients/{client_id}/readings/{reading_id}", response_model=ReadingRead)
-def api_update_reading(
-    client_id: int, reading_id: int, payload: ReadingUpdate, db: Session = Depends(get_db)
-):
-    reading = db.scalar(
-        select(Reading).where(Reading.id == reading_id, Reading.client_id == client_id)
-    )
-    if reading is None:
-        raise HTTPException(status_code=404, detail="reading not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(reading, field, value)
-    db.commit()
-    db.refresh(reading)
-    return reading
+def api_update_reading(client_id: int, reading_id: int, payload: ReadingUpdate, db: Session = Depends(get_db)):
+    reading = db.scalar(select(Reading).where(Reading.id == reading_id, Reading.client_id == client_id))
+    if reading is None: raise HTTPException(status_code=404, detail="reading not found")
+    for field, value in payload.model_dump(exclude_unset=True).items(): setattr(reading, field, value)
+    db.commit(); db.refresh(reading); return reading
 
 
 @app.delete("/api/clients/{client_id}/readings/{reading_id}", status_code=204)
 def api_delete_reading(client_id: int, reading_id: int, db: Session = Depends(get_db)):
-    reading = db.scalar(
-        select(Reading).where(Reading.id == reading_id, Reading.client_id == client_id)
-    )
-    if reading is None:
-        raise HTTPException(status_code=404, detail="reading not found")
-    db.delete(reading)
-    db.commit()
+    reading = db.scalar(select(Reading).where(Reading.id == reading_id, Reading.client_id == client_id))
+    if reading is None: raise HTTPException(status_code=404, detail="reading not found")
+    db.delete(reading); db.commit()
 
 
 app.mount("/mcp", mcp.sse_app(mount_path="/mcp"))
