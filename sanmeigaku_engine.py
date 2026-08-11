@@ -3,7 +3,6 @@ from datetime import date
 from lunar_python import Solar
 
 GAN = "甲乙丙丁戊己庚辛壬癸"
-ZHI = "子丑寅卯辰巳午未申酉戌亥"
 
 # 五行番号: 木0 火1 土2 金3 水4
 GAN_ELEMENT = {
@@ -28,33 +27,20 @@ HIDDEN_STEMS = {
     "亥": [(None, 0), ("甲", 12), ("壬", None)],
 }
 
+# lunar-python の十二運名称（簡体字）から算命学の十二大従星へ変換。
 STAGE_TO_STAR = {
     "胎": "天報星",
-    "養": "天印星",
-    "長生": "天貴星",
+    "养": "天印星",
+    "长生": "天貴星",
     "沐浴": "天恍星",
-    "冠帯": "天南星",
-    "建禄": "天禄星",
+    "冠带": "天南星",
+    "临官": "天禄星",
     "帝旺": "天将星",
     "衰": "天堂星",
     "病": "天胡星",
     "死": "天極星",
     "墓": "天庫星",
-    "絶": "天馳星",
-}
-
-# 十干ごとの十二運。順番は 子丑寅卯辰巳午未申酉戌亥。
-TWELVE_STAGES = {
-    "甲": ["沐浴", "冠帯", "建禄", "帝旺", "衰", "病", "死", "墓", "絶", "胎", "養", "長生"],
-    "乙": ["病", "衰", "帝旺", "建禄", "冠帯", "沐浴", "長生", "養", "胎", "絶", "墓", "死"],
-    "丙": ["胎", "養", "長生", "沐浴", "冠帯", "建禄", "帝旺", "衰", "病", "死", "墓", "絶"],
-    "丁": ["絶", "墓", "死", "病", "衰", "帝旺", "建禄", "冠帯", "沐浴", "長生", "養", "胎"],
-    "戊": ["胎", "養", "長生", "沐浴", "冠帯", "建禄", "帝旺", "衰", "病", "死", "墓", "絶"],
-    "己": ["絶", "墓", "死", "病", "衰", "帝旺", "建禄", "冠帯", "沐浴", "長生", "養", "胎"],
-    "庚": ["死", "墓", "絶", "胎", "養", "長生", "沐浴", "冠帯", "建禄", "帝旺", "衰", "病"],
-    "辛": ["長生", "養", "胎", "絶", "墓", "死", "病", "衰", "帝旺", "建禄", "冠帯", "沐浴"],
-    "壬": ["帝旺", "衰", "病", "死", "墓", "絶", "胎", "養", "長生", "沐浴", "冠帯", "建禄"],
-    "癸": ["建禄", "冠帯", "沐浴", "長生", "養", "胎", "絶", "墓", "死", "病", "衰", "帝旺"],
+    "绝": "天馳星",
 }
 
 
@@ -77,11 +63,6 @@ def major_star(day_gan: str, target_gan: str) -> str:
     raise ValueError("unsupported stem relation")
 
 
-def subordinate_star(day_gan: str, zhi: str) -> str:
-    stage = TWELVE_STAGES[day_gan][ZHI.index(zhi)]
-    return STAGE_TO_STAR[stage]
-
-
 def selected_hidden_stem(zhi: str, days_from_jie: int) -> str:
     """節入り日を0日として二十八元の初元・中元・本元を選ぶ。"""
     remaining = max(0, days_from_jie)
@@ -94,7 +75,6 @@ def selected_hidden_stem(zhi: str, days_from_jie: int) -> str:
         if remaining <= duration:
             return stem
         remaining -= duration
-    # 防御的フォールバック。通常ここには到達しない。
     for stem, _ in reversed(entries):
         if stem:
             return stem
@@ -103,7 +83,7 @@ def selected_hidden_stem(zhi: str, days_from_jie: int) -> str:
 
 def calculate_chart(birth_date: date) -> dict:
     """生年月日から標準的な算命学命式（陰占・陽占・天中殺）を算出する。"""
-    # 算命学は生年月日を基本とするため正午で固定し、23時の日替わり流派差を避ける。
+    # 算命学は日単位を基本とするため正午で固定し、23時の日替わり流派差を避ける。
     solar = Solar.fromYmdHms(birth_date.year, birth_date.month, birth_date.day, 12, 0, 0)
     lunar = solar.getLunar()
     eight = lunar.getEightChar()
@@ -127,6 +107,13 @@ def calculate_chart(birth_date: date) -> dict:
     month_hidden = selected_hidden_stem(month_zhi, days_from_jie)
     day_hidden = selected_hidden_stem(day_zhi, days_from_jie)
 
+    try:
+        early_star = STAGE_TO_STAR[eight.getYearDiShi()]
+        middle_star = STAGE_TO_STAR[eight.getMonthDiShi()]
+        late_star = STAGE_TO_STAR[eight.getDayDiShi()]
+    except KeyError as exc:
+        raise ValueError(f"unknown twelve-stage value: {exc}") from exc
+
     return {
         "year_pillar": year_pillar,
         "month_pillar": month_pillar,
@@ -136,9 +123,9 @@ def calculate_chart(birth_date: date) -> dict:
         "east_star": major_star(day_gan, year_hidden),
         "center_star": major_star(day_gan, month_hidden),
         "west_star": major_star(day_gan, day_hidden),
-        "early_star": subordinate_star(day_gan, year_zhi),
-        "middle_star": subordinate_star(day_gan, month_zhi),
-        "late_star": subordinate_star(day_gan, day_zhi),
+        "early_star": early_star,
+        "middle_star": middle_star,
+        "late_star": late_star,
         "tenchusatsu": eight.getDayXunKong() + "天中殺",
         "calculation_source": "auto:lunar-python + sanmeigaku standard 28-gen",
         "calculation_version": "1.0.0",
@@ -151,5 +138,8 @@ def calculate_chart(birth_date: date) -> dict:
             "year_hidden_stem": year_hidden,
             "month_hidden_stem": month_hidden,
             "day_hidden_stem": day_hidden,
+            "year_stage": eight.getYearDiShi(),
+            "month_stage": eight.getMonthDiShi(),
+            "day_stage": eight.getDayDiShi(),
         },
     }
