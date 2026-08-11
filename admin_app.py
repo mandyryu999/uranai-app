@@ -10,7 +10,7 @@ from admin_ui import ADMIN_HTML
 from database import SessionLocal
 from models import BirthProfile, SanmeigakuChart
 from sanmeigaku_engine import calculate_chart
-from server import app, sanmeigaku_chart_to_dict
+from server import app, mcp, sanmeigaku_chart_to_dict
 
 
 PROTECTED_PREFIXES = ("/admin", "/api/", "/docs", "/openapi.json")
@@ -29,11 +29,7 @@ def _is_protected(path: str) -> bool:
 
 
 def _unauthorized(message: str = "Authentication required") -> Response:
-    return JSONResponse(
-        status_code=401,
-        content={"detail": message},
-        headers={"WWW-Authenticate": 'Basic realm="uranai-app admin", charset="UTF-8"'},
-    )
+    return JSONResponse(status_code=401, content={"detail": message}, headers={"WWW-Authenticate": 'Basic realm="uranai-app admin", charset="UTF-8"'})
 
 
 def _mcp_unauthorized(message: str = "MCP token required") -> Response:
@@ -60,7 +56,6 @@ async def protect_routes(request: Request, call_next):
     expected_username, expected_password = _auth_config()
     if not expected_username or not expected_password:
         return JSONResponse(status_code=503, content={"detail": "Admin authentication is not configured"})
-
     authorization = request.headers.get("Authorization", "")
     if not authorization.startswith("Basic "):
         return _unauthorized()
@@ -72,6 +67,31 @@ async def protect_routes(request: Request, call_next):
     if not (secrets.compare_digest(username, expected_username) and secrets.compare_digest(password, expected_password)):
         return _unauthorized("Invalid username or password")
     return await call_next(request)
+
+
+def _calculate_and_save(client_id: int) -> dict:
+    with SessionLocal() as db:
+        profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+        if profile is None:
+            raise ValueError("birth profile not found")
+        result = calculate_chart(profile.birth_date)
+        detail = result.pop("calculation_detail")
+        chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+        if chart is None:
+            chart = SanmeigakuChart(client_id=client_id, **result)
+            db.add(chart)
+        else:
+            for field, value in result.items():
+                setattr(chart, field, value)
+        db.commit()
+        db.refresh(chart)
+        return {"chart": sanmeigaku_chart_to_dict(chart), "detail": detail}
+
+
+@mcp.tool()
+def auto_calculate_sanmeigaku(client_id: int) -> dict:
+    """保存済みの生年月日から算命学命式を自動計算して保存します。"""
+    return _calculate_and_save(client_id)
 
 
 def _admin_html_with_auto_calculation() -> str:
@@ -89,8 +109,7 @@ async function autoCalculateChart(){
   }catch(e){alert(e.message)}
 }
 '''
-    html = ADMIN_HTML.replace(old, new)
-    return html.replace("</script>", script + "</script>")
+    return ADMIN_HTML.replace(old, new).replace("</script>", script + "</script>")
 
 
 @app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
@@ -101,23 +120,9 @@ def admin_dashboard():
 @app.post("/api/clients/{client_id}/sanmeigaku-chart/auto-calculate")
 def auto_calculate_sanmeigaku_chart(client_id: int):
     """保存済み生年月日から命式を自動計算し、算命学命式へ保存します。"""
-    with SessionLocal() as db:
-        profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
-        if profile is None:
-            raise HTTPException(status_code=404, detail="birth profile not found")
-        try:
-            result = calculate_chart(profile.birth_date)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=f"chart calculation failed: {exc}") from exc
-
-        detail = result.pop("calculation_detail")
-        chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
-        if chart is None:
-            chart = SanmeigakuChart(client_id=client_id, **result)
-            db.add(chart)
-        else:
-            for field, value in result.items():
-                setattr(chart, field, value)
-        db.commit()
-        db.refresh(chart)
-        return {"chart": sanmeigaku_chart_to_dict(chart), "detail": detail}
+    try:
+        return _calculate_and_save(client_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"chart calculation failed: {exc}") from exc
