@@ -23,7 +23,6 @@ class ClientUpdate(BaseModel):
 
 class ClientRead(ClientCreate):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     created_at: datetime
     updated_at: datetime
@@ -57,7 +56,50 @@ class BirthProfileUpdate(BaseModel):
 
 class BirthProfileRead(BirthProfileCreate):
     model_config = ConfigDict(from_attributes=True)
+    id: int
+    client_id: int
+    created_at: datetime
+    updated_at: datetime
 
+
+class SanmeigakuChartCreate(BaseModel):
+    year_pillar: str = Field(min_length=2, max_length=10)
+    month_pillar: str = Field(min_length=2, max_length=10)
+    day_pillar: str = Field(min_length=2, max_length=10)
+    day_stem: str = Field(min_length=1, max_length=4)
+    tenchusatsu: str | None = Field(default=None, max_length=20)
+    central_star: str | None = Field(default=None, max_length=20)
+    north_star: str | None = Field(default=None, max_length=20)
+    east_star: str | None = Field(default=None, max_length=20)
+    south_star: str | None = Field(default=None, max_length=20)
+    west_star: str | None = Field(default=None, max_length=20)
+    childhood_star: str | None = Field(default=None, max_length=20)
+    middle_age_star: str | None = Field(default=None, max_length=20)
+    later_life_star: str | None = Field(default=None, max_length=20)
+    source: str = Field(default="manual", min_length=1, max_length=30)
+    notes: str | None = None
+
+
+class SanmeigakuChartUpdate(BaseModel):
+    year_pillar: str | None = Field(default=None, min_length=2, max_length=10)
+    month_pillar: str | None = Field(default=None, min_length=2, max_length=10)
+    day_pillar: str | None = Field(default=None, min_length=2, max_length=10)
+    day_stem: str | None = Field(default=None, min_length=1, max_length=4)
+    tenchusatsu: str | None = Field(default=None, max_length=20)
+    central_star: str | None = Field(default=None, max_length=20)
+    north_star: str | None = Field(default=None, max_length=20)
+    east_star: str | None = Field(default=None, max_length=20)
+    south_star: str | None = Field(default=None, max_length=20)
+    west_star: str | None = Field(default=None, max_length=20)
+    childhood_star: str | None = Field(default=None, max_length=20)
+    middle_age_star: str | None = Field(default=None, max_length=20)
+    later_life_star: str | None = Field(default=None, max_length=20)
+    source: str | None = Field(default=None, min_length=1, max_length=30)
+    notes: str | None = None
+
+
+class SanmeigakuChartRead(SanmeigakuChartCreate):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     client_id: int
     created_at: datetime
