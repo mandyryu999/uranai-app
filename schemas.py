@@ -132,3 +132,9 @@ class ReadingRead(BaseModel):
     private_notes: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class AIReadingRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=8000)
+    reading_limit: int = Field(default=10, ge=1, le=100)
+    model: str | None = Field(default=None, max_length=80)
