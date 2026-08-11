@@ -1,17 +1,49 @@
-# uranai-app（DB付き Web アプリ + MCP サーバー）
+# uranai-app（占い鑑定支援 Web アプリ + MCP）
 
-1つの Python アプリ（FastAPI）で、Web ページ・PostgreSQL・
-AI から使えるツール（MCP）の全部を提供します。
+FastAPI・PostgreSQL・MCP を組み合わせた、占い鑑定支援システムです。
+
+## 現在の実装
+
+### 1. 相談者カルテ
+相談者の基本情報を PostgreSQL に保存できます。
+
+保存項目:
+- 氏名
+- ふりがな
+- 電話番号
+- メールアドレス
+- LINE名
+- メモ
+
+REST API:
+- `POST /api/clients` 新規登録
+- `GET /api/clients` 一覧・検索
+- `GET /api/clients/{id}` 詳細
+- `PATCH /api/clients/{id}` 更新
+- `DELETE /api/clients/{id}` 削除
+
+ブラウザから `/docs` を開くと FastAPI の操作画面で API を試せます。
+
+MCP tools:
+- `db_now` DB接続確認
+- `create_client` 相談者登録
+- `search_clients` 相談者検索
 
 ## 構成
-- `web` … FastAPI（Web: `/`、MCP: `/mcp/sse`、内部 8000 番）
-- `db`  … PostgreSQL（データ保存先）
+- `web` FastAPI（Web/API/MCP、内部8000番）
+- `db` PostgreSQL 16
+- `database.py` DB接続・セッション
+- `models.py` DBモデル
+- `schemas.py` API入力・出力スキーマ
+- `server.py` Web API・MCP
 
-## デプロイ
-「環境別デプロイ設定」→「自動セットアップを実行」で本番反映されます。
+## MCP
+接続先: `https://<あなたのドメイン>/mcp/sse`
 
-## Web / MCP
-- Web: `https://<あなたのドメイン>/`
-- MCP: `https://<あなたのドメイン>/mcp/sse` を Claude Desktop に登録
-- `db_now` ツールは DB に接続して現在時刻を返すサンプルです。
-  `@mcp.tool()` を足せば、DB を読み書きするツールを自由に増やせます。
+## 今後の実装予定
+1. 相談者カルテ ← 現在ここ
+2. 生年月日・出生時間・出生地
+3. 算命学データ・命式
+4. 鑑定履歴
+5. AI連携の拡張
+6. 鑑定士向け管理画面
