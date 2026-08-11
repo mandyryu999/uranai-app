@@ -61,8 +61,6 @@ MCPクライアントは接続時に次のHTTPヘッダーを送ってくださ�
 Authorization: Bearer <MCP_AUTH_TOKEN>
 ```
 
-`MCP_AUTH_TOKEN` が未設定の場合、`/mcp...` は503を返して閉じます。間違ったトークンやトークンなしの場合は401です。
-
 ### 10. PostgreSQL自動バックアップ
 `backup` コンテナがDB起動後にバックアップを作成し、その後は既定で24時間ごとに圧縮SQLバックアップを保存します。
 
@@ -72,26 +70,25 @@ Authorization: Bearer <MCP_AUTH_TOKEN>
 - 保存先: Docker volume `db_backups`
 - ファイル形式: `uranai_app_YYYYMMDDTHHMMSSZ.sql.gz`
 
-必要に応じて変更できます。
+### 11. 算命学命式の自動計算
+出生プロフィールの生年月日から、管理画面の「自動計算」ボタンで命式を作成・更新できます。
 
-```bash
-export BACKUP_INTERVAL_SECONDS=86400
-export BACKUP_RETENTION_DAYS=14
-```
+自動計算対象:
+- 年干支・月干支・日干支
+- 十大主星（中央・北方・東方・南方・西方）
+- 十二大従星（初年期・中年期・晩年期）
+- 天中殺
+- 二十八元で選択した蔵干と節入り日数の計算メモ
 
-手動バックアップ:
+REST API:
+- `POST /api/clients/{id}/sanmeigaku-chart/auto-calculate`
 
-```bash
-docker compose exec backup /bin/sh /backup.sh
-```
+MCP:
+- `auto_calculate_sanmeigaku`
 
-バックアップ一覧確認:
+暦計算は `lunar_python` の節気・干支・十二運を利用し、人体星図の地元は標準的な二十八元（初元・中元・本元）で算出します。節入り当日に出生時刻が登録されている場合はその時刻を使います。出生時刻が不明の節入り当日は正午で暫定計算し、注意メッセージを返します。
 
-```bash
-docker compose exec backup ls -lh /backups
-```
-
-復元する場合は、対象の `.sql.gz` を展開して `psql` に流し込みます。復元操作は既存データを上書きする可能性があるため、実行前に必ず別バックアップを取得してください。
+既知ケースとして 1977-08-20 の命式が、丁巳・戊申・己酉／中央=司禄星／北=龍高星／東=調舒星／南=石門星／西=鳳閣星／初年=天将星／中年=天恍星／晩年=天貴星になることを回帰テストにしています。
 
 ## OpenAI API設定
 
@@ -102,8 +99,6 @@ export OPENAI_API_KEY="..."
 export OPENAI_MODEL="gpt-5"
 ```
 
-`OPENAI_API_KEY` が未設定の場合、`/ai/generate` は外部APIを呼ばず `not_configured` を返し、生成予定のプロンプトを確認できます。
-
 ## 主なMCP tools
 - `db_now`
 - `create_client`
@@ -112,6 +107,7 @@ export OPENAI_MODEL="gpt-5"
 - `get_birth_profile`
 - `set_sanmeigaku_chart`
 - `get_sanmeigaku_chart`
+- `auto_calculate_sanmeigaku`
 - `add_reading`
 - `list_readings`
 - `get_client_context`
@@ -125,10 +121,11 @@ export OPENAI_MODEL="gpt-5"
 - `database.py` DB接続・セッション
 - `models.py` DBモデル
 - `schemas.py` API入力・出力スキーマ
+- `sanmeigaku_engine.py` 命式自動計算エンジン
 - `ai_service.py` AIプロンプト作成・OpenAI API接続
 - `server.py` Web API・MCP
 - `admin_ui.py` 鑑定士向け管理画面HTML/JavaScript
-- `admin_app.py` 管理系Basic認証とMCP Bearer認証
+- `admin_app.py` 管理系認証・MCP認証・命式自動計算API
 - `scripts/backup.sh` PostgreSQLバックアップ処理
 
 ## MCP
@@ -146,3 +143,4 @@ export OPENAI_MODEL="gpt-5"
 9. 管理画面・管理API認証 ✅
 10. MCPトークン認証 ✅
 11. PostgreSQL自動バックアップ ✅
+12. 算命学命式自動計算 ✅

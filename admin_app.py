@@ -2,11 +2,15 @@ import base64
 import os
 import secrets
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from sqlalchemy import select
 
 from admin_ui import ADMIN_HTML
-from server import app
+from database import SessionLocal
+from models import BirthProfile, SanmeigakuChart
+from sanmeigaku_engine import calculate_chart
+from server import app, mcp, sanmeigaku_chart_to_dict
 
 
 PROTECTED_PREFIXES = ("/admin", "/api/", "/docs", "/openapi.json")
@@ -25,37 +29,24 @@ def _is_protected(path: str) -> bool:
 
 
 def _unauthorized(message: str = "Authentication required") -> Response:
-    return JSONResponse(
-        status_code=401,
-        content={"detail": message},
-        headers={"WWW-Authenticate": 'Basic realm="uranai-app admin", charset="UTF-8"'},
-    )
+    return JSONResponse(status_code=401, content={"detail": message}, headers={"WWW-Authenticate": 'Basic realm="uranai-app admin", charset="UTF-8"'})
 
 
 def _mcp_unauthorized(message: str = "MCP token required") -> Response:
-    return JSONResponse(
-        status_code=401,
-        content={"detail": message},
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    return JSONResponse(status_code=401, content={"detail": message}, headers={"WWW-Authenticate": "Bearer"})
 
 
 @app.middleware("http")
 async def protect_routes(request: Request, call_next):
     path = request.url.path
-
     if path.startswith("/mcp"):
         expected_token = _mcp_token()
         if not expected_token:
-            return JSONResponse(
-                status_code=503,
-                content={"detail": "MCP authentication is not configured"},
-            )
+            return JSONResponse(status_code=503, content={"detail": "MCP authentication is not configured"})
         authorization = request.headers.get("Authorization", "")
         if not authorization.startswith("Bearer "):
             return _mcp_unauthorized()
-        supplied_token = authorization[7:]
-        if not secrets.compare_digest(supplied_token, expected_token):
+        if not secrets.compare_digest(authorization[7:], expected_token):
             return _mcp_unauthorized("Invalid MCP token")
         return await call_next(request)
 
@@ -64,29 +55,76 @@ async def protect_routes(request: Request, call_next):
 
     expected_username, expected_password = _auth_config()
     if not expected_username or not expected_password:
-        return JSONResponse(
-            status_code=503,
-            content={"detail": "Admin authentication is not configured"},
-        )
-
+        return JSONResponse(status_code=503, content={"detail": "Admin authentication is not configured"})
     authorization = request.headers.get("Authorization", "")
     if not authorization.startswith("Basic "):
         return _unauthorized()
-
     try:
         decoded = base64.b64decode(authorization[6:], validate=True).decode("utf-8")
         username, password = decoded.split(":", 1)
     except (ValueError, UnicodeDecodeError):
         return _unauthorized("Invalid authentication header")
-
-    username_ok = secrets.compare_digest(username, expected_username)
-    password_ok = secrets.compare_digest(password, expected_password)
-    if not (username_ok and password_ok):
+    if not (secrets.compare_digest(username, expected_username) and secrets.compare_digest(password, expected_password)):
         return _unauthorized("Invalid username or password")
-
     return await call_next(request)
+
+
+def _calculate_and_save(client_id: int) -> dict:
+    with SessionLocal() as db:
+        profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+        if profile is None:
+            raise ValueError("birth profile not found")
+        known_birth_time = None if profile.birth_time_unknown else profile.birth_time
+        result = calculate_chart(profile.birth_date, known_birth_time)
+        detail = result.pop("calculation_detail")
+        chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+        if chart is None:
+            chart = SanmeigakuChart(client_id=client_id, **result)
+            db.add(chart)
+        else:
+            for field, value in result.items():
+                setattr(chart, field, value)
+        db.commit()
+        db.refresh(chart)
+        return {"chart": sanmeigaku_chart_to_dict(chart), "detail": detail}
+
+
+@mcp.tool()
+def auto_calculate_sanmeigaku(client_id: int) -> dict:
+    """保存済みの生年月日から算命学命式を自動計算して保存します。"""
+    return _calculate_and_save(client_id)
+
+
+def _admin_html_with_auto_calculation() -> str:
+    old = '<button class="secondary small" onclick="openChartModal()">登録・編集</button>'
+    new = '<span><button class="gold small" onclick="autoCalculateChart()">自動計算</button> <button class="secondary small" onclick="openChartModal()">登録・編集</button></span>'
+    script = r'''
+async function autoCalculateChart(){
+  if(!selectedId)return;
+  if(!currentContext?.birth_profile?.birth_date){alert('先に出生情報で生年月日を登録してください');return;}
+  if(!confirm('生年月日から命式を自動計算し、現在の命式を更新します。よろしいですか？'))return;
+  try{
+    const d=await api(`/api/clients/${selectedId}/sanmeigaku-chart/auto-calculate`,{method:'POST'});
+    await selectClient(selectedId);
+    const warning=d.detail?.boundary_warning?`\n\n注意: ${d.detail.boundary_warning}`:'';
+    alert(`命式を自動計算しました。\n${d.chart.year_pillar} / ${d.chart.month_pillar} / ${d.chart.day_pillar}\n${d.chart.tenchusatsu}${warning}`);
+  }catch(e){alert(e.message)}
+}
+'''
+    return ADMIN_HTML.replace(old, new).replace("</script>", script + "</script>")
 
 
 @app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 def admin_dashboard():
-    return ADMIN_HTML
+    return _admin_html_with_auto_calculation()
+
+
+@app.post("/api/clients/{client_id}/sanmeigaku-chart/auto-calculate")
+def auto_calculate_sanmeigaku_chart(client_id: int):
+    """保存済み生年月日から命式を自動計算し、算命学命式へ保存します。"""
+    try:
+        return _calculate_and_save(client_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"chart calculation failed: {exc}") from exc
