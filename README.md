@@ -1,6 +1,6 @@
 # uranai-app（占い鑑定支援 Web アプリ + MCP）
 
-FastAPI・PostgreSQL・MCP を組み合わせた、占い鑑定支援システムです。
+FastAPI・PostgreSQL・MCP・OpenAI API を組み合わせた、占い鑑定支援システムです。
 
 ## 現在の実装
 
@@ -16,47 +16,59 @@ FastAPI・PostgreSQL・MCP を組み合わせた、占い鑑定支援システ�
 ### 4. 鑑定履歴
 相談者1人に対して複数回の鑑定を時系列で保存できます。
 
-保存項目:
-- 鑑定日時
-- 相談テーマ
-- 相談内容
-- 使用占術
-- 鑑定結果
-- アドバイス
-- フォロー内容
-- 鑑定士用の非公開メモ
-
-REST API:
-- `POST /api/clients/{id}/readings` 鑑定履歴を追加
-- `GET /api/clients/{id}/readings` 履歴一覧を新しい順に取得
-- `GET /api/clients/{id}/readings/{reading_id}` 1件取得
-- `PATCH /api/clients/{id}/readings/{reading_id}` 更新
-- `DELETE /api/clients/{id}/readings/{reading_id}` 削除
-
 ### 5. AI連携用・相談者コンテキスト
-AIが鑑定を補助するときに必要な情報を、相談者IDだけでまとめて取得できます。
-
-取得内容:
-- 相談者カルテ
-- 出生プロフィール（未登録なら `null`）
-- 算命学命式（未登録なら `null`）
-- 直近の鑑定履歴（既定10件、最大100件）
+相談者カルテ、出生情報、算命学命式、直近の鑑定履歴を1回で取得できます。
 
 REST API:
-- `GET /api/clients/{id}/context` AI向け統合コンテキスト取得
-- `reading_limit` で含める鑑定履歴件数を指定可能
+- `GET /api/clients/{id}/context`
 
-MCP tools:
-- `db_now` DB接続確認
-- `create_client` 相談者登録
-- `search_clients` 相談者検索
-- `set_birth_profile` 出生情報の登録・更新
-- `get_birth_profile` 出生情報の取得
-- `set_sanmeigaku_chart` 算命学命式の登録・更新
-- `get_sanmeigaku_chart` 算命学命式の取得
-- `add_reading` 鑑定履歴を追加
-- `list_readings` 鑑定履歴を新しい順に取得
-- `get_client_context` AI鑑定用に相談者情報を一括取得
+MCP:
+- `get_client_context`
+
+### 6. AI鑑定プロンプト・回答生成
+保存済み相談者情報を使って、AI鑑定補助用のプロンプトを作成し、OpenAI Responses APIで回答を生成できます。
+
+REST API:
+- `POST /api/clients/{id}/ai/prompt` AIへ送るプロンプトを確認
+- `POST /api/clients/{id}/ai/generate` AI鑑定補助回答を生成
+
+MCP:
+- `build_ai_reading_prompt` AI送信用プロンプトを作成
+- `generate_ai_reading` OpenAI APIで回答生成
+
+回答方針:
+- 不安を煽らない
+- 断定しすぎない
+- 保存済み事実と占術上の解釈を区別する
+- 過去履歴との矛盾があれば示す
+- 最終判断は相談者本人に残す
+
+## OpenAI API設定
+
+APIキーはコードやGitHubリポジトリに書き込まず、サーバーの環境変数で設定してください。
+
+```bash
+export OPENAI_API_KEY="..."
+export OPENAI_MODEL="gpt-5"
+```
+
+`OPENAI_API_KEY` が未設定の場合、`/ai/generate` は外部APIを呼ばず `not_configured` を返し、生成予定のプロンプトを確認できます。
+
+Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` をWebコンテナへ引き渡します。
+
+## 主なMCP tools
+- `db_now`
+- `create_client`
+- `search_clients`
+- `set_birth_profile`
+- `get_birth_profile`
+- `set_sanmeigaku_chart`
+- `get_sanmeigaku_chart`
+- `add_reading`
+- `list_readings`
+- `get_client_context`
+- `build_ai_reading_prompt`
+- `generate_ai_reading`
 
 ブラウザから `/docs` を開くと FastAPI の操作画面で API を試せます。
 
@@ -66,16 +78,17 @@ MCP tools:
 - `database.py` DB接続・セッション
 - `models.py` DBモデル
 - `schemas.py` API入力・出力スキーマ
+- `ai_service.py` AIプロンプト作成・OpenAI API接続
 - `server.py` Web API・MCP
 
 ## MCP
 接続先: `https://<あなたのドメイン>/mcp/sse`
 
-## 今後の実装予定
+## 実装ロードマップ
 1. 相談者カルテ ✅
 2. 生年月日・出生時間・出生地 ✅
 3. 算命学データ・命式 ✅
 4. 鑑定履歴 ✅
-5. AI連携の拡張 🚧（統合コンテキスト取得まで実装）
-6. AI鑑定プロンプト・回答生成
-7. 鑑定士向け管理画面
+5. AI向け統合コンテキスト ✅
+6. AI鑑定プロンプト・回答生成 ✅
+7. 鑑定士向け管理画面 ← 次
