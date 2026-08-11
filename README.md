@@ -39,29 +39,59 @@ FastAPI・PostgreSQL・MCP・OpenAI API を組み合わせた、占い鑑定支�
 - AI鑑定結果を鑑定履歴へ引き継いで保存
 
 ### 8. 管理画面・管理API認証
-HTTP Basic認証で、相談者情報を扱う管理機能を保護します。
-
-保護対象:
-- `/admin`
-- `/api/...`
-- `/docs`
-- `/openapi.json`
-
-公開のままにするもの:
-- `/health`（デプロイ・死活監視用）
-- `/`（アプリ稼働確認）
-- `/mcp`（現在は既存MCPクライアント互換性のため別扱い。今後トークン認証を追加予定）
-
-サーバー側で次の環境変数を必ず設定してください。コードやGitHubへ実際のパスワードを書かないでください。
+HTTP Basic認証で `/admin`、`/api/...`、`/docs`、`/openapi.json` を保護します。`/health` はデプロイ・死活監視用として公開のままです。
 
 ```bash
 export ADMIN_USERNAME="your-admin-name"
 export ADMIN_PASSWORD="十分に長いランダムなパスワード"
 ```
 
-`ADMIN_USERNAME` または `ADMIN_PASSWORD` が未設定の場合、保護対象は `503 Admin authentication is not configured` を返して閉じた状態になります。
+認証情報が未設定の場合、保護対象は503を返して閉じます。
 
-ブラウザで `/admin` を開くとユーザー名・パスワード入力画面が表示され、認証後は同一オリジンの管理API呼び出しにも認証情報が使用されます。
+### 9. MCPトークン認証
+MCP接続は管理画面とは別のBearerトークンで保護します。
+
+```bash
+export MCP_AUTH_TOKEN="十分に長いランダムなトークン"
+```
+
+MCPクライアントは接続時に次のHTTPヘッダーを送ってください。
+
+```text
+Authorization: Bearer <MCP_AUTH_TOKEN>
+```
+
+`MCP_AUTH_TOKEN` が未設定の場合、`/mcp...` は503を返して閉じます。間違ったトークンやトークンなしの場合は401です。
+
+### 10. PostgreSQL自動バックアップ
+`backup` コンテナがDB起動後にバックアップを作成し、その後は既定で24時間ごとに圧縮SQLバックアップを保存します。
+
+既定値:
+- 保存間隔: 86400秒（24時間）
+- 保持期間: 14日
+- 保存先: Docker volume `db_backups`
+- ファイル形式: `uranai_app_YYYYMMDDTHHMMSSZ.sql.gz`
+
+必要に応じて変更できます。
+
+```bash
+export BACKUP_INTERVAL_SECONDS=86400
+export BACKUP_RETENTION_DAYS=14
+```
+
+手動バックアップ:
+
+```bash
+docker compose exec backup /bin/sh /backup.sh
+```
+
+バックアップ一覧確認:
+
+```bash
+docker compose exec backup ls -lh /backups
+```
+
+復元する場合は、対象の `.sql.gz` を展開して `psql` に流し込みます。復元操作は既存データを上書きする可能性があるため、実行前に必ず別バックアップを取得してください。
 
 ## OpenAI API設定
 
@@ -73,8 +103,6 @@ export OPENAI_MODEL="gpt-5"
 ```
 
 `OPENAI_API_KEY` が未設定の場合、`/ai/generate` は外部APIを呼ばず `not_configured` を返し、生成予定のプロンプトを確認できます。
-
-Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` / `ADMIN_USERNAME` / `ADMIN_PASSWORD` をWebコンテナへ引き渡します。
 
 ## 主なMCP tools
 - `db_now`
@@ -93,13 +121,15 @@ Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` / `ADMIN_U
 ## 構成
 - `web` FastAPI（Web/API/MCP、内部8000番）
 - `db` PostgreSQL 16
+- `backup` PostgreSQLバックアップ用サイドカー
 - `database.py` DB接続・セッション
 - `models.py` DBモデル
 - `schemas.py` API入力・出力スキーマ
 - `ai_service.py` AIプロンプト作成・OpenAI API接続
 - `server.py` Web API・MCP
 - `admin_ui.py` 鑑定士向け管理画面HTML/JavaScript
-- `admin_app.py` `/admin` と管理系認証を追加
+- `admin_app.py` 管理系Basic認証とMCP Bearer認証
+- `scripts/backup.sh` PostgreSQLバックアップ処理
 
 ## MCP
 接続先: `https://<あなたのドメイン>/mcp/sse`
@@ -114,4 +144,5 @@ Docker Composeではホスト側の `OPENAI_API_KEY` / `OPENAI_MODEL` / `ADMIN_U
 7. 鑑定士向け管理画面 ✅
 8. 管理画面から登録・編集・保存 ✅
 9. 管理画面・管理API認証 ✅
-10. MCP認証・自動バックアップ ← 次候補
+10. MCPトークン認証 ✅
+11. PostgreSQL自動バックアップ ✅
