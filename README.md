@@ -38,15 +38,19 @@ FastAPI・PostgreSQL・MCP・OpenAI API を組み合わせた、占い鑑定支�
 - AI鑑定補助回答を生成
 - AI鑑定結果を鑑定履歴へ引き継いで保存
 
-### 8. 管理画面・管理API認証
-HTTP Basic認証で `/admin`、`/api/...`、`/docs`、`/openapi.json` を保護します。`/health` はデプロイ・死活監視用として公開のままです。
+### 8. 初期管理者作成・ログイン
+管理者がまだ1人も登録されていない場合、トップURLまたは `/admin` を開くと `/setup` へ移動し、アプリ上で最初の管理者ID・パスワードを作成できます。
 
-```bash
-export ADMIN_USERNAME="your-admin-name"
-export ADMIN_PASSWORD="十分に長いランダムなパスワード"
-```
+初期管理者作成後:
+- `/login` から管理者ID・パスワードでログイン
+- ログイン状態は12時間保持
+- `/logout` でログアウト
+- `/admin`、`/api/...`、`/docs`、`/openapi.json` はログイン必須
+- `/health` はデプロイ・死活監視用として公開
 
-認証情報が未設定の場合、保護対象は503を返して閉じます。
+パスワードはPBKDF2-HMAC-SHA256でソルト付きハッシュ化してDBへ保存し、元のパスワード文字列は保存しません。初期管理者作成画面は、管理者が1人作成された時点で利用できなくなります。
+
+必要に応じて `ADMIN_SESSION_SECRET` をサーバー環境変数に設定すると、ログインCookieの署名鍵を明示的に固定できます。未設定時は登録済み管理者情報から署名鍵を生成します。
 
 ### 9. MCPトークン認証
 MCP接続は管理画面とは別のBearerトークンで保護します。
@@ -119,13 +123,13 @@ export OPENAI_MODEL="gpt-5"
 - `db` PostgreSQL 16
 - `backup` PostgreSQLバックアップ用サイドカー
 - `database.py` DB接続・セッション
-- `models.py` DBモデル
+- `models.py` DBモデル（相談者・出生情報・命式・鑑定履歴・管理者）
 - `schemas.py` API入力・出力スキーマ
 - `sanmeigaku_engine.py` 命式自動計算エンジン
 - `ai_service.py` AIプロンプト作成・OpenAI API接続
 - `server.py` Web API・MCP
 - `admin_ui.py` 鑑定士向け管理画面HTML/JavaScript
-- `admin_app.py` 管理系認証・MCP認証・命式自動計算API
+- `admin_app.py` 初期管理者作成・ログイン認証・MCP認証・命式自動計算API
 - `scripts/backup.sh` PostgreSQLバックアップ処理
 
 ## MCP
@@ -140,7 +144,7 @@ export OPENAI_MODEL="gpt-5"
 6. AI鑑定プロンプト・回答生成 ✅
 7. 鑑定士向け管理画面 ✅
 8. 管理画面から登録・編集・保存 ✅
-9. 管理画面・管理API認証 ✅
+9. 初期管理者作成・ログイン ✅
 10. MCPトークン認証 ✅
 11. PostgreSQL自動バックアップ ✅
 12. 算命学命式自動計算 ✅

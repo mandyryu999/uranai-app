@@ -7,10 +7,11 @@ import time
 from fastapi import Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from admin_ui import ADMIN_HTML
 from database import SessionLocal
-from models import BirthProfile, SanmeigakuChart
+from models import AdminUser, BirthProfile, SanmeigakuChart
 from sanmeigaku_engine import calculate_chart
 from server import app, mcp, sanmeigaku_chart_to_dict
 
@@ -18,50 +19,79 @@ from server import app, mcp, sanmeigaku_chart_to_dict
 PROTECTED_PREFIXES = ("/admin", "/api/", "/docs", "/openapi.json")
 SESSION_COOKIE = "uranai_admin_session"
 SESSION_MAX_AGE = 60 * 60 * 12
+PASSWORD_ITERATIONS = 600_000
+
+AUTH_CSS = r'''
+:root{font-family:Inter,"Noto Sans JP",system-ui,sans-serif;color:#1f2937;background:#f5f3ef}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(145deg,#f7f2e8,#efe7d9)}
+.auth{width:min(440px,100%);background:#fff;border:1px solid #ddd4c5;border-radius:18px;padding:28px;box-shadow:0 14px 40px #00000012}
+h1{font-size:24px;margin:0 0 6px;color:#211b15}.sub{color:#766d62;font-size:13px;margin-bottom:24px;line-height:1.6}
+label{display:block;font-size:12px;color:#62594f;margin:14px 0 6px}input{width:100%;border:1px solid #d7cfc2;border-radius:10px;padding:12px;font:inherit}
+button{width:100%;margin-top:20px;border:0;border-radius:10px;padding:12px 14px;background:#8b6b2f;color:#fff;font:inherit;font-weight:700;cursor:pointer}
+.error{background:#fff1f1;color:#9b2c2c;border:1px solid #efcaca;border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:14px;line-height:1.5}
+.success{background:#effbf2;color:#276738;border:1px solid #cdebd5;border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:14px}
+.note{margin-top:18px;color:#8a8176;font-size:11px;line-height:1.6;text-align:center}
+'''
 
 LOGIN_HTML = r'''<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>uranai-app 管理者ログイン</title>
-  <style>
-    :root{font-family:Inter,"Noto Sans JP",system-ui,sans-serif;color:#1f2937;background:#f5f3ef}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(145deg,#f7f2e8,#efe7d9)}
-    .login{width:min(420px,100%);background:#fff;border:1px solid #ddd4c5;border-radius:18px;padding:28px;box-shadow:0 14px 40px #00000012}
-    h1{font-size:24px;margin:0 0 6px;color:#211b15}.sub{color:#766d62;font-size:13px;margin-bottom:24px}
-    label{display:block;font-size:12px;color:#62594f;margin:14px 0 6px}input{width:100%;border:1px solid #d7cfc2;border-radius:10px;padding:12px;font:inherit}
-    button{width:100%;margin-top:20px;border:0;border-radius:10px;padding:12px 14px;background:#8b6b2f;color:#fff;font:inherit;font-weight:700;cursor:pointer}
-    .error{background:#fff1f1;color:#9b2c2c;border:1px solid #efcaca;border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:14px}
-    .note{margin-top:18px;color:#8a8176;font-size:11px;line-height:1.6;text-align:center}
-  </style>
-</head>
-<body>
-  <form class="login" method="post" action="/login">
-    <h1>uranai-app</h1>
-    <div class="sub">鑑定士 管理者ログイン</div>
-    __ERROR__
-    <label for="username">管理者ID</label>
-    <input id="username" name="username" autocomplete="username" required autofocus>
-    <label for="password">パスワード</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button type="submit">ログイン</button>
-    <div class="note">相談者情報を保護するため、管理者のみ利用できます。</div>
-  </form>
-</body>
-</html>'''
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>uranai-app 管理者ログイン</title><style>__CSS__</style></head>
+<body><form class="auth" method="post" action="/login">
+<h1>uranai-app</h1><div class="sub">鑑定士 管理者ログイン</div>__ERROR__
+<label for="username">管理者ID</label><input id="username" name="username" autocomplete="username" required autofocus>
+<label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+<button type="submit">ログイン</button><div class="note">相談者情報を保護するため、管理者のみ利用できます。</div>
+</form></body></html>'''.replace("__CSS__", AUTH_CSS)
+
+SETUP_HTML = r'''<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>uranai-app 初期管理者作成</title><style>__CSS__</style></head>
+<body><form class="auth" method="post" action="/setup">
+<h1>初期管理者を作成</h1><div class="sub">この画面は管理者がまだ1人も登録されていない時だけ表示されます。ここで決めたIDとパスワードが、今後の管理画面ログイン情報になります。</div>__ERROR__
+<label for="username">管理者ID</label><input id="username" name="username" minlength="3" maxlength="120" autocomplete="username" required autofocus>
+<label for="password">パスワード（12文字以上）</label><input id="password" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+<label for="password_confirm">パスワード確認</label><input id="password_confirm" name="password_confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+<button type="submit">最初の管理者を作成</button><div class="note">パスワードは暗号学的ハッシュに変換して保存し、元の文字列はDBへ保存しません。</div>
+</form></body></html>'''.replace("__CSS__", AUTH_CSS)
 
 
-def _auth_config() -> tuple[str, str]:
-    return os.environ.get("ADMIN_USERNAME", ""), os.environ.get("ADMIN_PASSWORD", "")
+def _render(template: str, error: str = "") -> str:
+    block = f'<div class="error">{error}</div>' if error else ""
+    return template.replace("__ERROR__", block)
+
+
+def _admin_exists() -> bool:
+    with SessionLocal() as db:
+        return db.scalar(select(AdminUser.id).limit(1)) is not None
+
+
+def _get_admin(username: str) -> AdminUser | None:
+    with SessionLocal() as db:
+        return db.scalar(select(AdminUser).where(AdminUser.username == username))
+
+
+def _hash_password(password: str, salt_hex: str | None = None) -> tuple[str, str]:
+    salt_hex = salt_hex or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(salt_hex),
+        PASSWORD_ITERATIONS,
+    ).hex()
+    return salt_hex, digest
+
+
+def _verify_password(password: str, admin: AdminUser) -> bool:
+    _, candidate = _hash_password(password, admin.password_salt)
+    return secrets.compare_digest(candidate, admin.password_hash)
 
 
 def _session_secret() -> str:
     configured = os.environ.get("ADMIN_SESSION_SECRET", "")
     if configured:
         return configured
-    username, password = _auth_config()
-    return hashlib.sha256(f"uranai-app:{username}:{password}".encode()).hexdigest()
+    with SessionLocal() as db:
+        admin = db.scalar(select(AdminUser).order_by(AdminUser.id).limit(1))
+        seed = admin.password_hash if admin else "not-configured"
+    return hashlib.sha256(f"uranai-app-session:{seed}".encode()).hexdigest()
 
 
 def _mcp_token() -> str:
@@ -89,8 +119,7 @@ def _valid_session(value: str | None) -> bool:
         return False
     if expires < int(time.time()):
         return False
-    expected_username, _ = _auth_config()
-    if not expected_username or not secrets.compare_digest(username, expected_username):
+    if _get_admin(username) is None:
         return False
     payload = f"{username}|{expires}"
     expected = hmac.new(_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
@@ -105,12 +134,6 @@ def _mcp_unauthorized(message: str = "MCP token required") -> Response:
 async def protect_routes(request: Request, call_next):
     path = request.url.path
 
-    if path == "/":
-        return RedirectResponse(url="/admin", status_code=307)
-
-    if path in ("/login", "/logout", "/health"):
-        return await call_next(request)
-
     if path.startswith("/mcp"):
         expected_token = _mcp_token()
         if not expected_token:
@@ -122,12 +145,19 @@ async def protect_routes(request: Request, call_next):
             return _mcp_unauthorized("Invalid MCP token")
         return await call_next(request)
 
+    has_admin = _admin_exists()
+
+    if path == "/":
+        return RedirectResponse(url="/admin" if has_admin else "/setup", status_code=307)
+
+    if path in ("/setup", "/login", "/logout", "/health"):
+        return await call_next(request)
+
     if not _is_protected(path):
         return await call_next(request)
 
-    expected_username, expected_password = _auth_config()
-    if not expected_username or not expected_password:
-        return RedirectResponse(url="/login?config=missing", status_code=303)
+    if not has_admin:
+        return RedirectResponse(url="/setup", status_code=303)
 
     if not _valid_session(request.cookies.get(SESSION_COOKIE)):
         return RedirectResponse(url="/login", status_code=303)
@@ -135,22 +165,61 @@ async def protect_routes(request: Request, call_next):
     return await call_next(request)
 
 
+@app.get("/setup", response_class=HTMLResponse, include_in_schema=False)
+def setup_page():
+    if _admin_exists():
+        return RedirectResponse(url="/login", status_code=303)
+    return _render(SETUP_HTML)
+
+
+@app.post("/setup", include_in_schema=False)
+def create_initial_admin(
+    username: str = Form(...),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+):
+    if _admin_exists():
+        return RedirectResponse(url="/login", status_code=303)
+
+    username = username.strip()
+    if len(username) < 3:
+        return HTMLResponse(_render(SETUP_HTML, "管理者IDは3文字以上にしてください。"), status_code=400)
+    if len(password) < 12:
+        return HTMLResponse(_render(SETUP_HTML, "パスワードは12文字以上にしてください。"), status_code=400)
+    if password != password_confirm:
+        return HTMLResponse(_render(SETUP_HTML, "確認用パスワードが一致しません。"), status_code=400)
+
+    salt, password_hash = _hash_password(password)
+    try:
+        with SessionLocal() as db:
+            if db.scalar(select(AdminUser.id).limit(1)) is not None:
+                return RedirectResponse(url="/login", status_code=303)
+            db.add(AdminUser(username=username, password_salt=salt, password_hash=password_hash))
+            db.commit()
+    except IntegrityError:
+        return HTMLResponse(_render(SETUP_HTML, "その管理者IDは使用できません。"), status_code=409)
+
+    return RedirectResponse(url="/login?created=1", status_code=303)
+
+
 @app.get("/login", response_class=HTMLResponse, include_in_schema=False)
 def login_page(request: Request):
+    if not _admin_exists():
+        return RedirectResponse(url="/setup", status_code=303)
     if _valid_session(request.cookies.get(SESSION_COOKIE)):
         return RedirectResponse(url="/admin", status_code=303)
-    config_missing = request.query_params.get("config") == "missing"
-    error = '<div class="error">管理者ID・パスワードがサーバーにまだ設定されていません。</div>' if config_missing else ""
-    return LOGIN_HTML.replace("__ERROR__", error)
+    message = '<div class="success">初期管理者を作成しました。登録したIDとパスワードでログインしてください。</div>' if request.query_params.get("created") == "1" else ""
+    return LOGIN_HTML.replace("__ERROR__", message)
 
 
 @app.post("/login", include_in_schema=False)
 def login(username: str = Form(...), password: str = Form(...)):
-    expected_username, expected_password = _auth_config()
-    if not expected_username or not expected_password:
-        return HTMLResponse(LOGIN_HTML.replace("__ERROR__", '<div class="error">管理者設定が未完了です。</div>'), status_code=503)
-    if not (secrets.compare_digest(username, expected_username) and secrets.compare_digest(password, expected_password)):
-        return HTMLResponse(LOGIN_HTML.replace("__ERROR__", '<div class="error">管理者IDまたはパスワードが違います。</div>'), status_code=401)
+    if not _admin_exists():
+        return RedirectResponse(url="/setup", status_code=303)
+    username = username.strip()
+    admin = _get_admin(username)
+    if admin is None or not _verify_password(password, admin):
+        return HTMLResponse(_render(LOGIN_HTML, "管理者IDまたはパスワードが違います。"), status_code=401)
     response = RedirectResponse(url="/admin", status_code=303)
     response.set_cookie(
         SESSION_COOKIE,
