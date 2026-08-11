@@ -1,3 +1,5 @@
+from datetime import date, time
+
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from mcp.server.fastmcp import FastMCP
@@ -5,8 +7,15 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
 from database import Base, SessionLocal, engine
-from models import Client
-from schemas import ClientCreate, ClientRead, ClientUpdate
+from models import BirthProfile, Client
+from schemas import (
+    BirthProfileCreate,
+    BirthProfileRead,
+    BirthProfileUpdate,
+    ClientCreate,
+    ClientRead,
+    ClientUpdate,
+)
 
 Base.metadata.create_all(bind=engine)
 
@@ -21,6 +30,10 @@ def get_db():
 
 def client_to_dict(client: Client) -> dict:
     return ClientRead.model_validate(client).model_dump(mode="json")
+
+
+def birth_profile_to_dict(profile: BirthProfile) -> dict:
+    return BirthProfileRead.model_validate(profile).model_dump(mode="json")
 
 
 mcp = FastMCP("uranai-app")
@@ -84,7 +97,56 @@ def search_clients(query: str = "", limit: int = 20) -> list[dict]:
         return [client_to_dict(client) for client in db.scalars(stmt).all()]
 
 
-app = FastAPI(title="uranai-app", version="0.2.0")
+@mcp.tool()
+def set_birth_profile(
+    client_id: int,
+    birth_date: str,
+    birth_time: str | None = None,
+    birth_time_unknown: bool = False,
+    birthplace_prefecture: str | None = None,
+    birthplace_city: str | None = None,
+    birthplace_detail: str | None = None,
+    timezone: str = "Asia/Tokyo",
+) -> dict:
+    """相談者の出生情報を新規登録または更新します。日付はYYYY-MM-DD、時刻はHH:MM形式です。"""
+    parsed_date = date.fromisoformat(birth_date)
+    parsed_time = None if birth_time_unknown or not birth_time else time.fromisoformat(birth_time)
+    payload = BirthProfileCreate(
+        birth_date=parsed_date,
+        birth_time=parsed_time,
+        birth_time_unknown=birth_time_unknown,
+        birthplace_prefecture=birthplace_prefecture,
+        birthplace_city=birthplace_city,
+        birthplace_detail=birthplace_detail,
+        timezone=timezone,
+    )
+    with SessionLocal() as db:
+        client = db.get(Client, client_id)
+        if client is None:
+            raise ValueError("client not found")
+        profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+        if profile is None:
+            profile = BirthProfile(client_id=client_id, **payload.model_dump())
+            db.add(profile)
+        else:
+            for field, value in payload.model_dump().items():
+                setattr(profile, field, value)
+        db.commit()
+        db.refresh(profile)
+        return birth_profile_to_dict(profile)
+
+
+@mcp.tool()
+def get_birth_profile(client_id: int) -> dict:
+    """相談者IDから出生情報を取得します。"""
+    with SessionLocal() as db:
+        profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+        if profile is None:
+            raise ValueError("birth profile not found")
+        return birth_profile_to_dict(profile)
+
+
+app = FastAPI(title="uranai-app", version="0.3.0")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -93,7 +155,7 @@ def index():
     <html lang="ja"><head><meta charset="utf-8"><title>uranai-app</title></head>
     <body style="font-family:sans-serif;max-width:760px;margin:48px auto;line-height:1.7">
       <h1>uranai-app</h1>
-      <p>相談者カルテ基盤が動作中です。</p>
+      <p>相談者カルテと出生情報の基盤が動作中です。</p>
       <ul>
         <li><a href="/docs">API操作画面</a></li>
         <li><a href="/api/clients">相談者一覧（JSON）</a></li>
@@ -176,6 +238,67 @@ def api_delete_client(client_id: int, db: Session = Depends(get_db)):
     if client is None:
         raise HTTPException(status_code=404, detail="client not found")
     db.delete(client)
+    db.commit()
+
+
+@app.post(
+    "/api/clients/{client_id}/birth-profile",
+    response_model=BirthProfileRead,
+    status_code=201,
+)
+def api_create_birth_profile(
+    client_id: int, payload: BirthProfileCreate, db: Session = Depends(get_db)
+):
+    client = db.get(Client, client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail="client not found")
+    existing = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="birth profile already exists")
+    profile = BirthProfile(client_id=client_id, **payload.model_dump())
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+@app.get(
+    "/api/clients/{client_id}/birth-profile",
+    response_model=BirthProfileRead,
+)
+def api_get_birth_profile(client_id: int, db: Session = Depends(get_db)):
+    profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+    if profile is None:
+        raise HTTPException(status_code=404, detail="birth profile not found")
+    return profile
+
+
+@app.patch(
+    "/api/clients/{client_id}/birth-profile",
+    response_model=BirthProfileRead,
+)
+def api_update_birth_profile(
+    client_id: int, payload: BirthProfileUpdate, db: Session = Depends(get_db)
+):
+    profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+    if profile is None:
+        raise HTTPException(status_code=404, detail="birth profile not found")
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("birth_time_unknown") is True:
+        updates["birth_time"] = None
+    for field, value in updates.items():
+        setattr(profile, field, value)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+@app.delete("/api/clients/{client_id}/birth-profile", status_code=204)
+def api_delete_birth_profile(client_id: int, db: Session = Depends(get_db)):
+    profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+    if profile is None:
+        raise HTTPException(status_code=404, detail="birth profile not found")
+    db.delete(profile)
     db.commit()
 
 
