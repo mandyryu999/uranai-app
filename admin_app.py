@@ -2,11 +2,15 @@ import base64
 import os
 import secrets
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from sqlalchemy import select
 
 from admin_ui import ADMIN_HTML
-from server import app
+from database import SessionLocal
+from models import BirthProfile, SanmeigakuChart
+from sanmeigaku_engine import calculate_chart
+from server import app, sanmeigaku_chart_to_dict
 
 
 PROTECTED_PREFIXES = ("/admin", "/api/", "/docs", "/openapi.json")
@@ -47,15 +51,11 @@ async def protect_routes(request: Request, call_next):
     if path.startswith("/mcp"):
         expected_token = _mcp_token()
         if not expected_token:
-            return JSONResponse(
-                status_code=503,
-                content={"detail": "MCP authentication is not configured"},
-            )
+            return JSONResponse(status_code=503, content={"detail": "MCP authentication is not configured"})
         authorization = request.headers.get("Authorization", "")
         if not authorization.startswith("Bearer "):
             return _mcp_unauthorized()
-        supplied_token = authorization[7:]
-        if not secrets.compare_digest(supplied_token, expected_token):
+        if not secrets.compare_digest(authorization[7:], expected_token):
             return _mcp_unauthorized("Invalid MCP token")
         return await call_next(request)
 
@@ -64,10 +64,7 @@ async def protect_routes(request: Request, call_next):
 
     expected_username, expected_password = _auth_config()
     if not expected_username or not expected_password:
-        return JSONResponse(
-            status_code=503,
-            content={"detail": "Admin authentication is not configured"},
-        )
+        return JSONResponse(status_code=503, content={"detail": "Admin authentication is not configured"})
 
     authorization = request.headers.get("Authorization", "")
     if not authorization.startswith("Basic "):
@@ -79,9 +76,10 @@ async def protect_routes(request: Request, call_next):
     except (ValueError, UnicodeDecodeError):
         return _unauthorized("Invalid authentication header")
 
-    username_ok = secrets.compare_digest(username, expected_username)
-    password_ok = secrets.compare_digest(password, expected_password)
-    if not (username_ok and password_ok):
+    if not (
+        secrets.compare_digest(username, expected_username)
+        and secrets.compare_digest(password, expected_password)
+    ):
         return _unauthorized("Invalid username or password")
 
     return await call_next(request)
@@ -90,3 +88,30 @@ async def protect_routes(request: Request, call_next):
 @app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 def admin_dashboard():
     return ADMIN_HTML
+
+
+@app.post("/api/clients/{client_id}/sanmeigaku-chart/auto-calculate")
+def auto_calculate_sanmeigaku_chart(client_id: int):
+    """保存済み生年月日から命式を自動計算し、算命学命式へ保存します。"""
+    with SessionLocal() as db:
+        profile = db.scalar(select(BirthProfile).where(BirthProfile.client_id == client_id))
+        if profile is None:
+            raise HTTPException(status_code=404, detail="birth profile not found")
+
+        try:
+            result = calculate_chart(profile.birth_date)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"chart calculation failed: {exc}") from exc
+
+        detail = result.pop("calculation_detail")
+        chart = db.scalar(select(SanmeigakuChart).where(SanmeigakuChart.client_id == client_id))
+        if chart is None:
+            chart = SanmeigakuChart(client_id=client_id, **result)
+            db.add(chart)
+        else:
+            for field, value in result.items():
+                setattr(chart, field, value)
+
+        db.commit()
+        db.refresh(chart)
+        return {"chart": sanmeigaku_chart_to_dict(chart), "detail": detail}
