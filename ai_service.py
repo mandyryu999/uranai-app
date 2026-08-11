@@ -3,6 +3,8 @@ import os
 
 from openai import OpenAI
 
+from secure_settings import get_openai_api_key
+
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5")
 
 SYSTEM_INSTRUCTIONS = """あなたは占い師の鑑定を補助するAIです。
@@ -36,7 +38,7 @@ def generate_reading(context: dict, question: str, model: str | None = None) -> 
     if not question.strip():
         raise ValueError("question is required")
 
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = get_openai_api_key()
     selected_model = model or DEFAULT_MODEL
     prompt = build_reading_prompt(context, question)
 
@@ -44,7 +46,7 @@ def generate_reading(context: dict, question: str, model: str | None = None) -> 
         return {
             "status": "not_configured",
             "model": selected_model,
-            "message": "OPENAI_API_KEY is not configured",
+            "message": "OpenAI API key is not configured. 管理画面のOpenAI API設定から登録してください。",
             "prompt": prompt,
         }
 

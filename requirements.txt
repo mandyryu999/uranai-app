@@ -6,3 +6,4 @@ mcp>=1.2.0,<2.0.0
 openai>=1.0
 lunar_python>=1.4.8,<2.0.0
 python-multipart>=0.0.9
+cryptography>=43.0,<47.0
