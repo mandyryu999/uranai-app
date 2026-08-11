@@ -7,55 +7,31 @@ FastAPI・PostgreSQL・MCP を組み合わせた、占い鑑定支援システ�
 ### 1. 相談者カルテ
 相談者の基本情報を PostgreSQL に保存できます。
 
-保存項目:
-- 氏名
-- ふりがな
-- 電話番号
-- メールアドレス
-- LINE名
-- メモ
-
-REST API:
-- `POST /api/clients` 新規登録
-- `GET /api/clients` 一覧・検索
-- `GET /api/clients/{id}` 詳細
-- `PATCH /api/clients/{id}` 更新
-- `DELETE /api/clients/{id}` 削除
-
 ### 2. 出生プロフィール
-相談者1人につき1件の出生情報を保存できます。
-
-保存項目:
-- 生年月日
-- 出生時間
-- 出生時間不明フラグ
-- 出生都道府県
-- 出生市区町村
-- 出生地詳細
-- タイムゾーン（既定: `Asia/Tokyo`）
-
-REST API:
-- `POST /api/clients/{id}/birth-profile` 新規登録
-- `GET /api/clients/{id}/birth-profile` 取得
-- `PATCH /api/clients/{id}/birth-profile` 更新
-- `DELETE /api/clients/{id}/birth-profile` 削除
+生年月日・出生時間・出生地・タイムゾーンを相談者に紐づけて保存できます。
 
 ### 3. 算命学命式
-相談者1人につき1件の算命学命式を保存できます。
+年・月・日干支、十大主星、十二大従星、天中殺などを保存できます。
+
+### 4. 鑑定履歴
+相談者1人に対して複数回の鑑定を時系列で保存できます。
 
 保存項目:
-- 年干支・月干支・日干支
-- 中央・北方・東方・南方・西方の十大主星
-- 初年期・中年期・晩年期の十二大従星
-- 天中殺
-- 計算元・計算バージョン
-- 補足メモ
+- 鑑定日時
+- 相談テーマ
+- 相談内容
+- 使用占術
+- 鑑定結果
+- アドバイス
+- フォロー内容
+- 鑑定士用の非公開メモ
 
 REST API:
-- `POST /api/clients/{id}/sanmeigaku-chart` 新規登録
-- `GET /api/clients/{id}/sanmeigaku-chart` 取得
-- `PATCH /api/clients/{id}/sanmeigaku-chart` 更新
-- `DELETE /api/clients/{id}/sanmeigaku-chart` 削除
+- `POST /api/clients/{id}/readings` 鑑定履歴を追加
+- `GET /api/clients/{id}/readings` 履歴一覧を新しい順に取得
+- `GET /api/clients/{id}/readings/{reading_id}` 1件取得
+- `PATCH /api/clients/{id}/readings/{reading_id}` 更新
+- `DELETE /api/clients/{id}/readings/{reading_id}` 削除
 
 MCP tools:
 - `db_now` DB接続確認
@@ -65,6 +41,8 @@ MCP tools:
 - `get_birth_profile` 出生情報の取得
 - `set_sanmeigaku_chart` 算命学命式の登録・更新
 - `get_sanmeigaku_chart` 算命学命式の取得
+- `add_reading` 鑑定履歴を追加
+- `list_readings` 鑑定履歴を新しい順に取得
 
 ブラウザから `/docs` を開くと FastAPI の操作画面で API を試せます。
 
@@ -83,6 +61,6 @@ MCP tools:
 1. 相談者カルテ ✅
 2. 生年月日・出生時間・出生地 ✅
 3. 算命学データ・命式 ✅
-4. 鑑定履歴 ← 次
-5. AI連携の拡張
+4. 鑑定履歴 ✅
+5. AI連携の拡張 ← 次
 6. 鑑定士向け管理画面
