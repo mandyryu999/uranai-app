@@ -16,6 +16,10 @@ def _auth_config() -> tuple[str, str]:
     return os.environ.get("ADMIN_USERNAME", ""), os.environ.get("ADMIN_PASSWORD", "")
 
 
+def _mcp_token() -> str:
+    return os.environ.get("MCP_AUTH_TOKEN", "")
+
+
 def _is_protected(path: str) -> bool:
     return path == "/admin" or any(path.startswith(prefix) for prefix in PROTECTED_PREFIXES[1:])
 
@@ -28,9 +32,34 @@ def _unauthorized(message: str = "Authentication required") -> Response:
     )
 
 
+def _mcp_unauthorized(message: str = "MCP token required") -> Response:
+    return JSONResponse(
+        status_code=401,
+        content={"detail": message},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 @app.middleware("http")
-async def protect_admin_routes(request: Request, call_next):
-    if not _is_protected(request.url.path):
+async def protect_routes(request: Request, call_next):
+    path = request.url.path
+
+    if path.startswith("/mcp"):
+        expected_token = _mcp_token()
+        if not expected_token:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "MCP authentication is not configured"},
+            )
+        authorization = request.headers.get("Authorization", "")
+        if not authorization.startswith("Bearer "):
+            return _mcp_unauthorized()
+        supplied_token = authorization[7:]
+        if not secrets.compare_digest(supplied_token, expected_token):
+            return _mcp_unauthorized("Invalid MCP token")
+        return await call_next(request)
+
+    if not _is_protected(path):
         return await call_next(request)
 
     expected_username, expected_password = _auth_config()
