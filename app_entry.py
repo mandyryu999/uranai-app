@@ -26,7 +26,10 @@ if _CHART_HEAD in admin_ui.ADMIN_HTML:
 from admin_app import app
 from database import SessionLocal
 from models import Client, SanmeigakuChart
+from report_page import router as report_router
 from star_meanings import explain_chart
+
+app.include_router(report_router)
 
 
 def get_explanation_db():
@@ -108,15 +111,15 @@ def sanmeigaku_result_page(
 <title>{client_name}｜算命学 鑑定結果</title>
 <style>
 :root{{font-family:Inter,"Noto Sans JP",system-ui,sans-serif;color:#251f19;background:#f5f3ef}}*{{box-sizing:border-box}}body{{margin:0}}
-header{{background:#17130f;color:#fff;padding:18px 22px}}header .inner,main{{max-width:980px;margin:auto}}header a{{color:#e9dfcf;text-decoration:none;font-size:13px}}h1{{font-size:24px;margin:10px 0 4px}}.sub{{color:#c8bfb3;font-size:13px}}
+header{{background:#17130f;color:#fff;padding:18px 22px}}header .inner,main{{max-width:980px;margin:auto}}header a{{color:#e9dfcf;text-decoration:none;font-size:13px;margin-right:14px}}h1{{font-size:24px;margin:10px 0 4px}}.sub{{color:#c8bfb3;font-size:13px}}
 main{{padding:24px 18px 48px}}.summary{{background:#fff;border:1px solid #e1d9cc;border-radius:16px;padding:20px;margin-bottom:20px}}.summary-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin-top:14px}}.label{{font-size:12px;color:#766d62}}.value{{font-weight:700;margin-top:3px}}
 .section-title{{font-size:19px;margin:28px 0 12px}}.cards{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}}.star-card{{background:#fff;border:1px solid #e1d9cc;border-radius:15px;padding:18px;box-shadow:0 2px 9px #00000008}}.star-head{{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}}.star-head h2{{font-size:21px;margin:4px 0 0}}.kind{{font-size:11px;color:#85672e}}.place{{font-size:12px;background:#f3ede2;border-radius:999px;padding:6px 9px;text-align:right}}.tags{{margin:12px 0}}.tag{{display:inline-block;background:#f7f2e9;border-radius:999px;padding:4px 8px;margin:2px;font-size:12px}}h3{{font-size:13px;color:#6f6458;margin:15px 0 6px}}p{{font-size:14px;line-height:1.8;margin:0}}.note{{margin-top:24px;font-size:12px;color:#776e64;line-height:1.7;background:#eee9e1;padding:12px;border-radius:10px}}
 @media(max-width:720px){{.cards,.summary-grid{{grid-template-columns:1fr}}.star-head{{display:block}}.place{{display:inline-block;margin-top:8px}}}}
 </style></head><body>
-<header><div class="inner"><a href="/admin">← 管理画面へ戻る</a><h1>{client_name} さんの算命学 鑑定結果</h1><div class="sub">AIを使用せず、保存されている命式と解説辞書から表示しています。</div></div></header>
+<header><div class="inner"><a href="/admin">← 管理画面へ戻る</a><a href="/admin/clients/{client_id}/sanmeigaku-report">総合鑑定レポートを見る</a><h1>{client_name} さんの算命学 鑑定結果</h1><div class="sub">AIを使用せず、保存されている命式と解説辞書から表示しています。</div></div></header>
 <main>
 <section class="summary"><strong>命式概要</strong><div class="summary-grid"><div><div class="label">年柱 / 月柱 / 日柱</div><div class="value">{pillars}</div></div><div><div class="label">天中殺</div><div class="value">{tenchusatsu}</div></div></div></section>
 <h2 class="section-title">十大主星 ― 本質・人間関係・社会での表れ方</h2><div class="cards">{major_cards}</div>
 <h2 class="section-title">十二大従星 ― 人生の時期ごとのエネルギー</h2><div class="cards">{life_cards}</div>
-<div class="note">この画面は現在「星の基本意味」と「配置・時期の意味」を表示する第一段階です。今後、星と位置を組み合わせた詳しい解釈や総合鑑定へ拡張できます。</div>
+<div class="note">この画面では星ごとの基本意味を確認できます。「総合鑑定レポート」では、同じ鑑定結果を本質・社会・人間関係・人生の流れに整理して表示します。</div>
 </main></body></html>'''

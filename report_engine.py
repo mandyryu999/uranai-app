@@ -1,0 +1,149 @@
+"""AIを使わない算命学レポート組み立てロジック。
+
+既存のSanmeigakuChartを読み、star_meaningsの確定済み辞書だけを使って
+再現性のあるレポートデータを作る。DBへの書き込みは行わない。
+"""
+
+from star_meanings import explain_chart
+
+
+def _major_by_position(explanation: dict) -> dict[str, dict]:
+    return {
+        item.get("position"): item
+        for item in explanation.get("major_stars", [])
+        if item.get("position")
+    }
+
+
+def _life_by_period(explanation: dict) -> dict[str, dict]:
+    return {
+        item.get("period"): item
+        for item in explanation.get("life_stars", [])
+        if item.get("period")
+    }
+
+
+def _sentence(item: dict | None) -> str:
+    if not item:
+        return "この項目の星はまだ登録されていません。"
+    return item.get("summary") or ""
+
+
+def build_sanmeigaku_report(chart) -> dict:
+    """保存済み命式から、AIなしの構造化鑑定レポートを返す。"""
+    explanation = explain_chart(chart)
+    major = _major_by_position(explanation)
+    life = _life_by_period(explanation)
+
+    center = major.get("center")
+    north = major.get("north")
+    east = major.get("east")
+    south = major.get("south")
+    west = major.get("west")
+    early = life.get("early")
+    middle = life.get("middle")
+    late = life.get("late")
+
+    core = {
+        "title": "本質・自分らしさ",
+        "star": center.get("name") if center else None,
+        "text": _sentence(center),
+        "position_text": center.get("position_meaning") if center else None,
+        "keywords": center.get("keywords", []) if center else [],
+    }
+
+    relationships = [
+        {
+            "title": "目上・親・精神面",
+            "star": north.get("name") if north else None,
+            "text": _sentence(north),
+            "position_text": north.get("position_meaning") if north else None,
+            "keywords": north.get("keywords", []) if north else [],
+        },
+        {
+            "title": "社会・仕事・友人",
+            "star": east.get("name") if east else None,
+            "text": _sentence(east),
+            "position_text": east.get("position_meaning") if east else None,
+            "keywords": east.get("keywords", []) if east else [],
+        },
+        {
+            "title": "目下・子ども・未来",
+            "star": south.get("name") if south else None,
+            "text": _sentence(south),
+            "position_text": south.get("position_meaning") if south else None,
+            "keywords": south.get("keywords", []) if south else [],
+        },
+        {
+            "title": "家庭・配偶者・身近な関係",
+            "star": west.get("name") if west else None,
+            "text": _sentence(west),
+            "position_text": west.get("position_meaning") if west else None,
+            "keywords": west.get("keywords", []) if west else [],
+        },
+    ]
+
+    life_flow = [
+        {
+            "title": "初年期",
+            "star": early.get("name") if early else None,
+            "text": _sentence(early),
+            "period_text": early.get("period_meaning") if early else None,
+            "keywords": early.get("keywords", []) if early else [],
+        },
+        {
+            "title": "中年期",
+            "star": middle.get("name") if middle else None,
+            "text": _sentence(middle),
+            "period_text": middle.get("period_meaning") if middle else None,
+            "keywords": middle.get("keywords", []) if middle else [],
+        },
+        {
+            "title": "晩年期",
+            "star": late.get("name") if late else None,
+            "text": _sentence(late),
+            "period_text": late.get("period_meaning") if late else None,
+            "keywords": late.get("keywords", []) if late else [],
+        },
+    ]
+
+    present_stars = [
+        item.get("name")
+        for item in explanation.get("major_stars", []) + explanation.get("life_stars", [])
+        if item.get("name")
+    ]
+    keyword_order = []
+    for item in explanation.get("major_stars", []) + explanation.get("life_stars", []):
+        for keyword in item.get("keywords", []):
+            if keyword not in keyword_order:
+                keyword_order.append(keyword)
+
+    overview_parts = []
+    if center:
+        overview_parts.append(
+            f"命式の中心には{center['name']}があり、{center.get('summary', '')}"
+        )
+    if east:
+        overview_parts.append(
+            f"社会面には{east['name']}が表れ、{east.get('summary', '')}"
+        )
+    if middle:
+        overview_parts.append(
+            f"人生の中心期には{middle['name']}のエネルギーが示され、{middle.get('summary', '')}"
+        )
+
+    return {
+        "pillars": {
+            "year": getattr(chart, "year_pillar", None),
+            "month": getattr(chart, "month_pillar", None),
+            "day": getattr(chart, "day_pillar", None),
+            "tenchusatsu": getattr(chart, "tenchusatsu", None),
+        },
+        "core": core,
+        "relationships": relationships,
+        "life_flow": life_flow,
+        "overview": " ".join(overview_parts),
+        "all_stars": present_stars,
+        "keywords": keyword_order,
+        "basis_note": "このレポートは保存済み命式とアプリ内の固定解説辞書を組み合わせて作成しています。AIによる文章生成は使用していません。",
+    }
