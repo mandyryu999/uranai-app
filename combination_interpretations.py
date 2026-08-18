@@ -1,7 +1,7 @@
 """十大主星の組み合わせ鑑定ルール。
 
-AIを使わず、中央（本質）を軸に東方（社会・仕事）・西方（家庭・配偶者）
-との組み合わせを決定的に生成する。同じ命式には常に同じ結果を返す。
+AIを使わず、中央（本質）を軸に東方（社会・仕事）・西方（家庭・配偶者）・
+北方（目上・親・精神面）との組み合わせを決定的に生成する。
 """
 
 STAR_TRAITS = {
@@ -30,46 +30,41 @@ HOME_TRAITS = {
     "玉堂星": {"home": "会話や学びを共有し、理解し合うことを通して安心できる関係を育てる", "gift": "丁寧に理解する力", "watch": "理屈で解決しようとして感情への共感が遅れること"},
 }
 
+NORTH_TRAITS = {
+    "貫索星": {"north": "目上や親に対しても自分の考えを持ち、精神的な自立を保とうとする", "gift": "精神的な自立", "watch": "助言を拒みすぎて学びの機会を狭めること"},
+    "石門星": {"north": "世代や立場を越えて対話し、人とのつながりから価値観を広げる", "gift": "柔軟な対話力", "watch": "周囲の価値観を取り込みすぎて自分の軸がぼやけること"},
+    "鳳閣星": {"north": "目上や親から受け取った経験を自然な言葉で理解し、自分なりに伝えていく", "gift": "穏やかな受容力", "watch": "深く向き合うべき課題まで軽く流してしまうこと"},
+    "調舒星": {"north": "精神面を深く掘り下げ、目上や親から受ける影響も繊細に感じ取る", "gift": "深い内省力", "watch": "過去の言葉や評価を心に残しすぎること"},
+    "禄存星": {"north": "目上や親への恩義や愛情を大切にし、支えることで関係を育てる", "gift": "温かな奉仕心", "watch": "期待に応えようとして自分を後回しにすること"},
+    "司禄星": {"north": "受け継いだ価値観や知恵を大切に蓄え、安心できる精神的基盤を作る", "gift": "着実な継承力", "watch": "古い価値観を守りすぎて新しい考えを受け入れにくくなること"},
+    "車騎星": {"north": "尊敬できる相手から実践を通して学び、筋の通った関係を求める", "gift": "実践的な学習力", "watch": "目上にも率直すぎて衝突を招くこと"},
+    "牽牛星": {"north": "親・目上・伝統や社会的規範を尊重し、信頼に応えることで精神的な軸を作る", "gift": "礼節と責任感", "watch": "正しさや期待を背負いすぎること"},
+    "龍高星": {"north": "既存の価値観をそのまま受け入れず、自分で確かめながら新しい思想や世界観を学ぶ", "gift": "精神的な探究力", "watch": "反発すること自体が目的になってしまうこと"},
+    "玉堂星": {"north": "親や目上、伝統から知識を受け継ぎ、学びを通して精神的な安定を得る", "gift": "知識を受け継ぐ力", "watch": "教えや常識を重視しすぎて自分の体験を後回しにすること"},
+}
+
 
 def get_center_east_interpretation(center_star: str | None, east_star: str | None) -> dict | None:
-    """中央星×東方星の組み合わせ鑑定を返す。10×10=100通り。"""
-    center = STAR_TRAITS.get(center_star or "")
-    east = STAR_TRAITS.get(east_star or "")
-    if not center or not east:
-        return None
-
-    if center_star == east_star:
-        relation = f"本質と社会で見せる姿がともに{center_star}なので、内面と行動の方向が一致しやすい組み合わせです。"
-        integration = f"{center['gift']}が一貫して表れやすく、得意分野を明確にすると強い専門性になります。"
-    else:
-        relation = f"本質の{center_star}と、社会面の{east_star}という二つの性質を持つ組み合わせです。"
-        integration = f"内面では「{center['core']}」ことを大切にしながら、社会では「{east['work']}」ことで持ち味が形になります。"
-
-    text = (
-        f"{relation}{integration} "
-        f"本質側の強みは{center['gift']}、仕事・社会面で活かしやすい強みは{east['gift']}です。"
-        f"この二つを対立させず、内面の価値観を社会での行動に結びつけることが仕事運を活かすポイントです。"
-        f"注意点は、本質面では{center['watch']}、社会面では{east['watch']}です。"
-    )
-    return {"title": "本質 × 社会・仕事", "center_star": center_star, "east_star": east_star, "text": text, "strengths": [center["gift"], east["gift"]], "work_style": east["work"], "basis": "中央星（本質）と東方星（社会・仕事）の組み合わせ"}
+    center = STAR_TRAITS.get(center_star or ""); east = STAR_TRAITS.get(east_star or "")
+    if not center or not east: return None
+    relation = f"本質と社会で見せる姿がともに{center_star}なので、内面と行動の方向が一致しやすい組み合わせです。" if center_star == east_star else f"本質の{center_star}と、社会面の{east_star}という二つの性質を持つ組み合わせです。"
+    integration = f"{center['gift']}が一貫して表れやすく、得意分野を明確にすると強い専門性になります。" if center_star == east_star else f"内面では「{center['core']}」ことを大切にしながら、社会では「{east['work']}」ことで持ち味が形になります。"
+    text = f"{relation}{integration} 本質側の強みは{center['gift']}、仕事・社会面で活かしやすい強みは{east['gift']}です。この二つを対立させず、内面の価値観を社会での行動に結びつけることが仕事運を活かすポイントです。注意点は、本質面では{center['watch']}、社会面では{east['watch']}です。"
+    return {"title":"本質 × 社会・仕事","center_star":center_star,"east_star":east_star,"text":text,"strengths":[center['gift'],east['gift']],"work_style":east['work'],"basis":"中央星（本質）と東方星（社会・仕事）の組み合わせ"}
 
 
 def get_center_west_interpretation(center_star: str | None, west_star: str | None) -> dict | None:
-    """中央星×西方星の組み合わせ鑑定を返す。10×10=100通り。"""
-    center = STAR_TRAITS.get(center_star or "")
-    west = HOME_TRAITS.get(west_star or "")
-    if not center or not west:
-        return None
+    center = STAR_TRAITS.get(center_star or ""); west = HOME_TRAITS.get(west_star or "")
+    if not center or not west: return None
+    relation = f"本質と家庭・身近な関係に同じ{center_star}が表れるため、内面の価値観が私生活にも素直に出やすい組み合わせです。" if center_star == west_star else f"本質の{center_star}と、家庭・配偶者面の{west_star}という二つの性質を持つ組み合わせです。"
+    text = f"{relation}本質では「{center['core']}」ことを大切にし、身近な関係では「{west['home']}」傾向があります。本質側の強みである{center['gift']}と、家庭面の{west['gift']}を両立できると、外の自分と内の自分のバランスが整いやすくなります。特に意識したいのは、相手に自分と同じ感じ方を求めすぎず、生活の中で率直に気持ちを共有することです。注意点は、本質面では{center['watch']}、家庭面では{west['watch']}です。"
+    return {"title":"本質 × 家庭・配偶者","center_star":center_star,"west_star":west_star,"text":text,"strengths":[center['gift'],west['gift']],"relationship_style":west['home'],"basis":"中央星（本質）と西方星（家庭・配偶者）の組み合わせ"}
 
-    if center_star == west_star:
-        relation = f"本質と家庭・身近な関係に同じ{center_star}が表れるため、内面の価値観が私生活にも素直に出やすい組み合わせです。"
-    else:
-        relation = f"本質の{center_star}と、家庭・配偶者面の{west_star}という二つの性質を持つ組み合わせです。"
 
-    text = (
-        f"{relation}本質では「{center['core']}」ことを大切にし、身近な関係では「{west['home']}」傾向があります。"
-        f"本質側の強みである{center['gift']}と、家庭面の{west['gift']}を両立できると、外の自分と内の自分のバランスが整いやすくなります。"
-        f"特に意識したいのは、相手に自分と同じ感じ方を求めすぎず、生活の中で率直に気持ちを共有することです。"
-        f"注意点は、本質面では{center['watch']}、家庭面では{west['watch']}です。"
-    )
-    return {"title": "本質 × 家庭・配偶者", "center_star": center_star, "west_star": west_star, "text": text, "strengths": [center["gift"], west["gift"]], "relationship_style": west["home"], "basis": "中央星（本質）と西方星（家庭・配偶者）の組み合わせ"}
+def get_center_north_interpretation(center_star: str | None, north_star: str | None) -> dict | None:
+    """中央星×北方星の組み合わせ鑑定を返す。10×10=100通り。"""
+    center = STAR_TRAITS.get(center_star or ""); north = NORTH_TRAITS.get(north_star or "")
+    if not center or not north: return None
+    relation = f"本質と精神面に同じ{center_star}が表れるため、自分の価値観と心の支えが一致しやすい組み合わせです。" if center_star == north_star else f"本質の{center_star}と、目上・親・精神面の{north_star}という二つの性質を持つ組み合わせです。"
+    text = f"{relation}本質では「{center['core']}」ことを大切にし、精神面では「{north['north']}」傾向があります。本質側の{center['gift']}と、精神面の{north['gift']}をつなげることで、自分らしい判断軸が育ちます。目上や親との関係では、受け継ぐものと自分で選ぶものを分けて考えることが安定につながります。注意点は、本質面では{center['watch']}、精神面では{north['watch']}です。"
+    return {"title":"本質 × 目上・親・精神面","center_star":center_star,"north_star":north_star,"text":text,"strengths":[center['gift'],north['gift']],"mental_style":north['north'],"basis":"中央星（本質）と北方星（目上・親・精神面）の組み合わせ"}
