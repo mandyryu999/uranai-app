@@ -32,11 +32,12 @@ def _tags(values) -> str:
 
 def _detail_card(item: dict, period: bool = False) -> str:
     context = item.get("period_text") if period else item.get("position_text")
+    context_html = f'<p class="context">{_e(context)}</p>' if context else ""
     return f'''<section class="detail-card">
       <div class="detail-head"><div><div class="eyebrow">{_e(item.get('title'))}</div><h3>{_e(item.get('star') or '未登録')}</h3></div></div>
       <div class="tags">{_tags(item.get('keywords'))}</div>
       <p>{_e(item.get('text'))}</p>
-      {f'<p class="context">{_e(context)}</p>' if context else ''}
+      {context_html}
     </section>'''
 
 
@@ -57,6 +58,11 @@ def sanmeigaku_report_page(client_id: int, db: Session = Depends(get_report_db))
     pillars = " / ".join(_e(v or "—") for v in (p["year"], p["month"], p["day"]))
     tenchusatsu = _e(p.get("tenchusatsu") or "未登録")
     core = report["core"]
+    core_context_html = (
+        f'<p class="context">{_e(core.get("position_text"))}</p>'
+        if core.get("position_text")
+        else ""
+    )
     relation_cards = "".join(_detail_card(item) for item in report["relationships"])
     life_cards = "".join(_detail_card(item, period=True) for item in report["life_flow"])
     all_stars = "・".join(_e(v) for v in report["all_stars"]) or "—"
@@ -76,7 +82,7 @@ main{{padding:24px 18px 52px}}.hero,.section{{background:#fff;border:1px solid #
 <main>
 <section class="hero"><h2>命式概要</h2><div class="hero-grid"><div><div class="label">年柱 / 月柱 / 日柱</div><div class="value">{pillars}</div></div><div><div class="label">天中殺</div><div class="value">{tenchusatsu}</div></div></div></section>
 <section class="section"><h2>総合概要</h2><p class="overview">{overview}</p><div class="tags">{_tags(report['keywords'])}</div><div class="stars">命盤に表れている星：{all_stars}</div></section>
-<section class="section"><h2>本質・自分らしさ</h2><div class="eyebrow">中央</div><h3>{_e(core.get('star') or '未登録')}</h3><div class="tags">{_tags(core.get('keywords'))}</div><p>{_e(core.get('text'))}</p>{f'<p class="context">{_e(core.get("position_text"))}</p>' if core.get('position_text') else ''}</section>
+<section class="section"><h2>本質・自分らしさ</h2><div class="eyebrow">中央</div><h3>{_e(core.get('star') or '未登録')}</h3><div class="tags">{_tags(core.get('keywords'))}</div><p>{_e(core.get('text'))}</p>{core_context_html}</section>
 <section class="section"><h2>人間関係・社会での表れ方</h2><div class="details">{relation_cards}</div></section>
 <section class="section"><h2>人生の流れ ― 初年期・中年期・晩年期</h2><div class="details">{life_cards}</div></section>
 <div class="note">{_e(report['basis_note'])} 現段階では、登録済みの星と位置・時期の固定解説を組み合わせたレポートです。今後、検証済みの組み合わせルールを追加することで、さらに詳しい総合鑑定へ拡張できます。</div>
