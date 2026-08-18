@@ -1,6 +1,6 @@
 """算命学の星の意味をAIなしで返すためのルールベース辞書。
 
-文章はアプリ独自の説明文として管理し、今後位置別・組み合わせ別の解釈を拡張する。
+このファイルは表示用の解説辞書だけを持ち、相談者・命式など既存DBデータは変更しない。
 """
 
 TEN_MAJOR_STARS = {
@@ -39,10 +39,19 @@ MAJOR_POSITION_LABELS = {
     "west": "西方（家庭・配偶者・身近な関係）",
 }
 
-LIFE_PERIOD_LABELS = {
-    "early": "初年期",
-    "middle": "中年期",
-    "late": "晩年期",
+MAJOR_POSITION_MEANINGS = {
+    "center": "中央は、その人自身の本質や物事を判断するときの中心的な傾向を見る場所です。",
+    "north": "北方は、目上の人や親との関わり、精神面、受け継ぐものとの関係を見る場所です。",
+    "east": "東方は、社会や仕事、友人など外の世界で見せやすい行動や役割を見る場所です。",
+    "south": "南方は、目下の人や子ども、未来へ向かう姿勢、学びや表現の方向を見る場所です。",
+    "west": "西方は、家庭や配偶者など身近な人との関係、日常生活で表れやすい傾向を見る場所です。",
+}
+
+LIFE_PERIOD_LABELS = {"early": "初年期", "middle": "中年期", "late": "晩年期"}
+LIFE_PERIOD_MEANINGS = {
+    "early": "初年期は、主に幼少期から若年期にかけて表れやすいエネルギーや環境との関わり方を見る場所です。",
+    "middle": "中年期は、社会で活動する時期や人生の中心期に表れやすいエネルギーの使い方を見る場所です。",
+    "late": "晩年期は、経験を重ねた後の生き方や、人生後半で表れやすいエネルギーを見る場所です。",
 }
 
 
@@ -50,18 +59,18 @@ def explain_major_star(star_name: str | None, position: str | None = None) -> di
     if not star_name or star_name not in TEN_MAJOR_STARS:
         return None
     data = TEN_MAJOR_STARS[star_name]
-    return {"name": star_name, "position": position, "position_label": MAJOR_POSITION_LABELS.get(position), **data}
+    return {"name": star_name, "position": position, "position_label": MAJOR_POSITION_LABELS.get(position), "position_meaning": MAJOR_POSITION_MEANINGS.get(position), **data}
 
 
 def explain_life_star(star_name: str | None, period: str | None = None) -> dict | None:
     if not star_name or star_name not in TWELVE_LIFE_STARS:
         return None
     data = TWELVE_LIFE_STARS[star_name]
-    return {"name": star_name, "period": period, "period_label": LIFE_PERIOD_LABELS.get(period), **data}
+    return {"name": star_name, "period": period, "period_label": LIFE_PERIOD_LABELS.get(period), "period_meaning": LIFE_PERIOD_MEANINGS.get(period), **data}
 
 
 def explain_chart(chart) -> dict:
-    """SanmeigakuChart相当のオブジェクトから8つの星の基本解説を返す。"""
+    """SanmeigakuChart相当のオブジェクトから8つの星の基本解説を返す（DB更新なし）。"""
     major = []
     for position, field in (("center", "center_star"), ("north", "north_star"), ("east", "east_star"), ("south", "south_star"), ("west", "west_star")):
         item = explain_major_star(getattr(chart, field, None), position)
