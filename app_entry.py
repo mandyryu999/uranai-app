@@ -11,6 +11,18 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+# Keep the large existing admin UI untouched.  Before admin_app imports its
+# ADMIN_HTML constant, add one navigation button by replacing one exact,
+# stable fragment in memory.  This does not change DB data or admin_ui.py.
+import admin_ui
+
+_CHART_HEAD = '<div class="card"><div class="card-head"><h2>算命学命式</h2><button class="secondary small" onclick="openChartModal()">登録・編集</button></div><div id="chartCard"></div></div>'
+_CHART_HEAD_WITH_RESULT = '<div class="card"><div class="card-head"><h2>算命学命式</h2><div><button class="gold small" onclick="if(selectedId)window.location.href=\'/admin/clients/\'+selectedId+\'/sanmeigaku-result\';else alert(\'相談者を選択してください\')">鑑定結果を見る</button> <button class="secondary small" onclick="openChartModal()">登録・編集</button></div></div><div id="chartCard"></div></div>'
+if _CHART_HEAD in admin_ui.ADMIN_HTML:
+    admin_ui.ADMIN_HTML = admin_ui.ADMIN_HTML.replace(
+        _CHART_HEAD, _CHART_HEAD_WITH_RESULT, 1
+    )
+
 from admin_app import app
 from database import SessionLocal
 from models import Client, SanmeigakuChart
