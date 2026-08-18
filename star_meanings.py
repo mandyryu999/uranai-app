@@ -3,6 +3,8 @@
 このファイルは表示用の解説辞書だけを持ち、相談者・命式など既存DBデータは変更しない。
 """
 
+from position_interpretations import get_major_position_interpretation
+
 TEN_MAJOR_STARS = {
     "貫索星": {"keywords": ["自立", "守り", "意志", "マイペース"], "summary": "自分の軸を大切にし、簡単には周囲に流されない星です。自立心と粘り強さを活かすほど力を発揮します。"},
     "石門星": {"keywords": ["協調", "仲間", "社交", "つながり"], "summary": "人との横のつながりを広げ、仲間と力を合わせることに長けた星です。対等な関係の中で力を発揮します。"},
@@ -59,7 +61,14 @@ def explain_major_star(star_name: str | None, position: str | None = None) -> di
     if not star_name or star_name not in TEN_MAJOR_STARS:
         return None
     data = TEN_MAJOR_STARS[star_name]
-    return {"name": star_name, "position": position, "position_label": MAJOR_POSITION_LABELS.get(position), "position_meaning": MAJOR_POSITION_MEANINGS.get(position), **data}
+    return {
+        "name": star_name,
+        "position": position,
+        "position_label": MAJOR_POSITION_LABELS.get(position),
+        "position_meaning": MAJOR_POSITION_MEANINGS.get(position),
+        "position_interpretation": get_major_position_interpretation(star_name, position),
+        **data,
+    }
 
 
 def explain_life_star(star_name: str | None, period: str | None = None) -> dict | None:
