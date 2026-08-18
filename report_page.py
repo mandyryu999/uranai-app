@@ -41,6 +41,19 @@ def _detail_card(item: dict, period: bool = False) -> str:
     </section>'''
 
 
+def _combination_card(item: dict) -> str:
+    strengths = item.get("strengths") or []
+    strength_html = _tags(strengths)
+    basis = item.get("basis") or ""
+    return f'''<section class="combo-card">
+      <div class="eyebrow">組み合わせ鑑定</div>
+      <h3>{_e(item.get('title'))}</h3>
+      <div class="tags">{strength_html}</div>
+      <p>{_e(item.get('text'))}</p>
+      <p class="context">判定根拠：{_e(basis)}</p>
+    </section>'''
+
+
 @router.get("/admin/clients/{client_id}/sanmeigaku-report", response_class=HTMLResponse)
 def sanmeigaku_report_page(client_id: int, db: Session = Depends(get_report_db)):
     """保存済み命式から、AIなしの総合レポートを表示する。"""
@@ -58,13 +71,14 @@ def sanmeigaku_report_page(client_id: int, db: Session = Depends(get_report_db))
     pillars = " / ".join(_e(v or "—") for v in (p["year"], p["month"], p["day"]))
     tenchusatsu = _e(p.get("tenchusatsu") or "未登録")
     core = report["core"]
-    core_context_html = (
-        f'<p class="context">{_e(core.get("position_text"))}</p>'
-        if core.get("position_text")
-        else ""
-    )
+    core_context_html = f'<p class="context">{_e(core.get("position_text"))}</p>' if core.get("position_text") else ""
     relation_cards = "".join(_detail_card(item) for item in report["relationships"])
     life_cards = "".join(_detail_card(item, period=True) for item in report["life_flow"])
+    combination_cards = "".join(_combination_card(item) for item in report.get("combinations", []))
+    combination_section = (
+        f'<section class="section"><h2>星の組み合わせから見る総合傾向</h2><div class="details">{combination_cards}</div></section>'
+        if combination_cards else ""
+    )
     all_stars = "・".join(_e(v) for v in report["all_stars"]) or "—"
     overview = _e(report.get("overview") or "現在登録されている星の解説をもとにレポートを構成しています。")
 
@@ -74,7 +88,7 @@ def sanmeigaku_report_page(client_id: int, db: Session = Depends(get_report_db))
 <style>
 :root{{font-family:Inter,"Noto Sans JP",system-ui,sans-serif;color:#241e18;background:#f3efe8}}*{{box-sizing:border-box}}body{{margin:0}}
 .top{{background:#17130f;color:#fff;padding:20px 22px}}.inner,main{{max-width:980px;margin:auto}}.nav{{display:flex;gap:14px;align-items:center;flex-wrap:wrap}}.top a{{color:#eadfce;text-decoration:none;font-size:13px}}.print{{margin-left:auto;border:1px solid #b59a69;background:#8b6b2f;color:#fff;border-radius:9px;padding:8px 12px;cursor:pointer}}h1{{font-size:26px;margin:14px 0 4px}}.subtitle{{font-size:13px;color:#c9c0b5}}
-main{{padding:24px 18px 52px}}.hero,.section{{background:#fff;border:1px solid #dfd6c8;border-radius:16px;padding:22px;margin-bottom:18px;box-shadow:0 3px 12px #00000008}}.hero-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px}}.label,.eyebrow{{font-size:12px;color:#816d4c}}.value{{font-size:17px;font-weight:700;margin-top:3px}}h2{{font-size:20px;margin:0 0 14px}}h3{{font-size:19px;margin:4px 0 0}}p{{line-height:1.85;font-size:14px;margin:10px 0 0}}.overview{{font-size:15px;line-height:1.9}}.tags{{margin:10px 0}}.tag{{display:inline-block;background:#f5efe5;border-radius:999px;padding:4px 8px;margin:2px;font-size:12px}}.details{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.detail-card{{border:1px solid #e5ddd1;border-radius:13px;padding:16px;background:#fdfcf9}}.context{{color:#6e655b;background:#f5f1ea;border-radius:9px;padding:10px}}.stars{{font-size:14px;line-height:1.8;color:#5e554c}}.note{{font-size:12px;color:#756c63;line-height:1.7;background:#ede8e0;padding:12px;border-radius:10px}}
+main{{padding:24px 18px 52px}}.hero,.section{{background:#fff;border:1px solid #dfd6c8;border-radius:16px;padding:22px;margin-bottom:18px;box-shadow:0 3px 12px #00000008}}.hero-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px}}.label,.eyebrow{{font-size:12px;color:#816d4c}}.value{{font-size:17px;font-weight:700;margin-top:3px}}h2{{font-size:20px;margin:0 0 14px}}h3{{font-size:19px;margin:4px 0 0}}p{{line-height:1.85;font-size:14px;margin:10px 0 0}}.overview{{font-size:15px;line-height:1.9}}.tags{{margin:10px 0}}.tag{{display:inline-block;background:#f5efe5;border-radius:999px;padding:4px 8px;margin:2px;font-size:12px}}.details{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.detail-card,.combo-card{{border:1px solid #e5ddd1;border-radius:13px;padding:16px;background:#fdfcf9}}.combo-card{{border-color:#d3bd91;background:#fffaf1}}.context{{color:#6e655b;background:#f5f1ea;border-radius:9px;padding:10px}}.stars{{font-size:14px;line-height:1.8;color:#5e554c}}.note{{font-size:12px;color:#756c63;line-height:1.7;background:#ede8e0;padding:12px;border-radius:10px}}
 @media(max-width:720px){{.hero-grid,.details{{grid-template-columns:1fr}}.print{{margin-left:0}}}}
 @media print{{.top{{background:#fff;color:#111;padding:0 0 16px}}.top a,.print{{display:none}}body{{background:#fff}}main{{padding:0}}.hero,.section{{box-shadow:none;break-inside:avoid}}}}
 </style></head><body>
@@ -83,7 +97,8 @@ main{{padding:24px 18px 52px}}.hero,.section{{background:#fff;border:1px solid #
 <section class="hero"><h2>命式概要</h2><div class="hero-grid"><div><div class="label">年柱 / 月柱 / 日柱</div><div class="value">{pillars}</div></div><div><div class="label">天中殺</div><div class="value">{tenchusatsu}</div></div></div></section>
 <section class="section"><h2>総合概要</h2><p class="overview">{overview}</p><div class="tags">{_tags(report['keywords'])}</div><div class="stars">命盤に表れている星：{all_stars}</div></section>
 <section class="section"><h2>本質・自分らしさ</h2><div class="eyebrow">中央</div><h3>{_e(core.get('star') or '未登録')}</h3><div class="tags">{_tags(core.get('keywords'))}</div><p>{_e(core.get('text'))}</p>{core_context_html}</section>
+{combination_section}
 <section class="section"><h2>人間関係・社会での表れ方</h2><div class="details">{relation_cards}</div></section>
 <section class="section"><h2>人生の流れ ― 初年期・中年期・晩年期</h2><div class="details">{life_cards}</div></section>
-<div class="note">{_e(report['basis_note'])} 現段階では、登録済みの星と位置・時期の固定解説を組み合わせたレポートです。今後、検証済みの組み合わせルールを追加することで、さらに詳しい総合鑑定へ拡張できます。</div>
+<div class="note">{_e(report['basis_note'])} 現在は星と配置・時期に加えて、中央星を軸にした重要な組み合わせルールを段階的に反映しています。</div>
 </main></body></html>'''
