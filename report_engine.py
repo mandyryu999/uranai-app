@@ -1,10 +1,11 @@
 """AIを使わない算命学レポート組み立てロジック。
 
-既存のSanmeigakuChartを読み、star_meaningsの確定済み辞書だけを使って
+既存のSanmeigakuChartを読み、確定済み辞書と組み合わせルールだけを使って
 再現性のあるレポートデータを作る。DBへの書き込みは行わない。
 """
 
 from star_meanings import explain_chart
+from combination_interpretations import get_center_east_interpretation
 
 
 def _major_by_position(explanation: dict) -> dict[str, dict]:
@@ -13,12 +14,6 @@ def _major_by_position(explanation: dict) -> dict[str, dict]:
 
 def _life_by_period(explanation: dict) -> dict[str, dict]:
     return {item.get("period"): item for item in explanation.get("life_stars", []) if item.get("period")}
-
-
-def _sentence(item: dict | None) -> str:
-    if not item:
-        return "この項目の星はまだ登録されていません。"
-    return item.get("summary") or ""
 
 
 def _major_text(item: dict | None) -> str:
@@ -54,6 +49,9 @@ def build_sanmeigaku_report(chart) -> dict:
         {"title": "晩年期", "star": late.get("name") if late else None, "text": _life_text(late), "period_text": late.get("period_meaning") if late else None, "keywords": late.get("keywords", []) if late else []},
     ]
 
+    center_east = get_center_east_interpretation(center.get("name") if center else None, east.get("name") if east else None)
+    combinations = [center_east] if center_east else []
+
     present_stars = [item.get("name") for item in explanation.get("major_stars", []) + explanation.get("life_stars", []) if item.get("name")]
     keyword_order = []
     for item in explanation.get("major_stars", []) + explanation.get("life_stars", []):
@@ -66,6 +64,8 @@ def build_sanmeigaku_report(chart) -> dict:
         overview_parts.append(f"命式の中心には{center['name']}があり、{_major_text(center)}")
     if east:
         overview_parts.append(f"社会面には{east['name']}があり、{_major_text(east)}")
+    if center_east:
+        overview_parts.append(center_east["text"])
     if middle:
         overview_parts.append(f"人生の中心期には{middle['name']}があり、{_life_text(middle)}")
 
@@ -74,6 +74,7 @@ def build_sanmeigaku_report(chart) -> dict:
         "core": core,
         "relationships": relationships,
         "life_flow": life_flow,
+        "combinations": combinations,
         "overview": " ".join(overview_parts),
         "all_stars": present_stars,
         "keywords": keyword_order,
