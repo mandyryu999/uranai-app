@@ -11,6 +11,7 @@ from combination_interpretations import (
     get_center_north_interpretation,
 )
 from center_south_interpretations import get_center_south_interpretation
+from center_middle_life_interpretations import get_center_middle_life_interpretation
 
 
 def _major_by_position(explanation: dict) -> dict[str, dict]:
@@ -59,7 +60,8 @@ def build_sanmeigaku_report(chart) -> dict:
     center_west = get_center_west_interpretation(center_name, west.get("name") if west else None)
     center_north = get_center_north_interpretation(center_name, north.get("name") if north else None)
     center_south = get_center_south_interpretation(center_name, south.get("name") if south else None)
-    combinations = [item for item in (center_east, center_west, center_north, center_south) if item]
+    center_middle = get_center_middle_life_interpretation(center_name, middle.get("name") if middle else None)
+    combinations = [item for item in (center_east, center_west, center_north, center_south, center_middle) if item]
 
     present_stars = [item.get("name") for item in explanation.get("major_stars", []) + explanation.get("life_stars", []) if item.get("name")]
     keyword_order = []
@@ -73,7 +75,7 @@ def build_sanmeigaku_report(chart) -> dict:
         overview_parts.append(f"命式の中心には{center['name']}があり、{_major_text(center)}")
     if east:
         overview_parts.append(f"社会面には{east['name']}があり、{_major_text(east)}")
-    for combo in (center_east, center_west, center_north, center_south):
+    for combo in (center_east, center_west, center_north, center_south, center_middle):
         if combo:
             overview_parts.append(combo["text"])
     if middle:
